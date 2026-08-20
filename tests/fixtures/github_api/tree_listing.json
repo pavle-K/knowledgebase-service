@@ -1,0 +1,11 @@
+{
+  "sha": "abc123",
+  "tree": [
+    {"path": "README.md", "type": "blob"},
+    {"path": "src", "type": "tree"},
+    {"path": "src/main.py", "type": "blob"},
+    {"path": "node_modules", "type": "tree"},
+    {"path": "node_modules/pkg/index.js", "type": "blob"}
+  ],
+  "truncated": false
+}

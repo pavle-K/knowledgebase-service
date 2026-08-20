@@ -10,7 +10,7 @@ from langgraph.graph.state import CompiledStateGraph
 
 from src.ingestion.embedder import Embedder
 from src.query.synthesizer import LLMClient, synthesize
-from src.query.vector_search import SearchResult, search_documents
+from src.query.vector_search import SearchResult, search_all
 
 
 class QueryState(TypedDict):
@@ -23,7 +23,7 @@ def build_graph(
     conn: psycopg.Connection, embedder: Embedder, llm: LLMClient
 ) -> CompiledStateGraph[QueryState, None, QueryState, QueryState]:
     def vector_search_node(state: QueryState) -> dict[str, list[SearchResult]]:
-        return {"results": search_documents(conn, state["query"], embedder)}
+        return {"results": search_all(conn, state["query"], embedder)}
 
     def synthesize_node(state: QueryState) -> dict[str, str]:
         return {"summary": synthesize(state["query"], state["results"], llm)}

@@ -12,6 +12,9 @@ dependencies = [
     "detect-secrets>=1.5",
     "langgraph>=0.6",
     "anthropic>=0.60",
+    "tree-sitter>=0.23",
+    "tree-sitter-javascript>=0.23",
+    "tree-sitter-typescript>=0.23",
 ]
 
 [project.optional-dependencies]
