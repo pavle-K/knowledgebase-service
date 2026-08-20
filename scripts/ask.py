@@ -1,4 +1,4 @@
-"""CLI: python -m scripts.ask "question" - vector search + LLM synthesis over L1 documents."""
+"""CLI: python -m scripts.ask "question" - full query engine (sql/vector/graph/hybrid)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import sys
 import psycopg
 
 from src.ingestion.embedder import get_embedder
-from src.query.graph import run_query
+from src.query.query_engine import run_query_engine
 from src.query.synthesizer import get_llm_client
 
 
@@ -27,8 +27,11 @@ def main() -> int:
     llm = get_llm_client()
 
     with psycopg.connect(database_url) as conn:
-        state = run_query(conn, embedder, llm, query)
+        state = run_query_engine(conn, embedder, llm, query)
 
+    print(f"[intent: {state['intent']}, confidence: {state['confidence']}]")
+    if state["coverage_note"]:
+        print(f"Coverage note: {state['coverage_note']}")
     print(state["summary"])
     return 0
 

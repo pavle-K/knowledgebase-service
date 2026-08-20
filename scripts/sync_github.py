@@ -30,6 +30,7 @@ from src.ingestion.graph_static_analysis import (
     parse_requirements_txt,
 )
 from src.ingestion.manifest import ManifestError, parse_manifest
+from src.ingestion.technologies import sync_technologies
 from src.query.synthesizer import LLMClient, get_llm_client
 
 STAT_KEYS = ("chunks", "embedded", "skipped_unchanged", "skipped_secret")
@@ -65,6 +66,7 @@ def _sync_manifest_for_repo(
         return
     stats = sync_manifest(conn, project_id, manifest)
     record_ingestion_log(conn, "manual", project_id, "graph", "success", stats)
+    sync_technologies(conn, project_id, manifest.technologies)
 
 
 def _sync_static_analysis_for_file(
