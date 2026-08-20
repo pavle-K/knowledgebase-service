@@ -27,6 +27,7 @@ from src.query.vector_search import SearchResult, search_all, search_commits
 
 class QueryState(TypedDict):
     query: str
+    layers: list[str] | None
     intent: str
     sql_result: SqlResult | None
     vector_results: list[SearchResult]
@@ -47,7 +48,8 @@ def build_query_engine(
         return {"sql_result": run_sql_with_self_heal(conn, state["query"], llm, schema)}
 
     def vector_node(state: QueryState) -> dict[str, list[SearchResult]]:
-        return {"vector_results": search_all(conn, state["query"], embedder)}
+        results = search_all(conn, state["query"], embedder, layers=state["layers"])
+        return {"vector_results": results}
 
     def time_node(state: QueryState) -> dict[str, list[SearchResult]]:
         since, until = parse_time_range(state["query"])
@@ -98,11 +100,16 @@ def build_query_engine(
 
 
 def run_query_engine(
-    conn: psycopg.Connection, embedder: Embedder, llm: LLMClient, query: str
+    conn: psycopg.Connection,
+    embedder: Embedder,
+    llm: LLMClient,
+    query: str,
+    layers: list[str] | None = None,
 ) -> QueryState:
     app = build_query_engine(conn, embedder, llm)
     initial: QueryState = {
         "query": query,
+        "layers": layers,
         "intent": "",
         "sql_result": None,
         "vector_results": [],
