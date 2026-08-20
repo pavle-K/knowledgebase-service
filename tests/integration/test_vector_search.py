@@ -1,12 +1,15 @@
+import datetime as dt
 import uuid
 
 import psycopg
 
 from src.ingestion.code import sync_code_file
+from src.ingestion.commits import sync_commit
 from src.ingestion.documents import upsert_project
 from src.ingestion.embedder import FakeEmbedder, format_vector
-from src.ingestion.github_client import RepoInfo
-from src.query.vector_search import search_all, search_code_chunks, search_documents
+from src.ingestion.github_client import CommitDetail, CommitFile, CommitInfo, RepoInfo
+from src.query.synthesizer import FakeLLMClient
+from src.query.vector_search import search_all, search_code_chunks, search_commits, search_documents
 from tests.integration.conftest import MigratedDb
 
 
@@ -117,3 +120,73 @@ def test_search_all_merges_documents_and_code_by_distance(
 
     assert any(r.layer == "code" and r.symbol_name == "rate_limit" for r in results)
     assert results == sorted(results, key=lambda r: r.distance)
+
+
+def test_search_commits_ranks_exact_match_first(
+    db_conn: psycopg.Connection, migrated_db: MigratedDb
+) -> None:
+    project_id = upsert_project(db_conn, _fake_repo())
+    embedder = FakeEmbedder()
+    llm = FakeLLMClient(response="Adds rate limiting to the API.")
+
+    detail = CommitDetail(
+        files=[
+            CommitFile(filename="src/f.py", additions=1, deletions=0, patch="@@ -1 +1,2 @@\n+x\n")
+        ],
+        additions=1,
+        deletions=0,
+    )
+    info = CommitInfo(
+        sha="abc123",
+        message="Add rate limiting",
+        author="pavle-K",
+        committed_at="2026-01-15T10:00:00Z",
+    )
+    sync_commit(db_conn, project_id, info, detail, embedder, llm)
+
+    other_info = CommitInfo(
+        sha="def456", message="Unrelated fix", author="pavle-K", committed_at="2026-01-10T10:00:00Z"
+    )
+    other_llm = FakeLLMClient(response="Totally unrelated change.")
+    sync_commit(db_conn, project_id, other_info, detail, embedder, other_llm)
+    db_conn.commit()
+
+    with psycopg.connect(migrated_db.app_ro_url) as ro_conn:
+        results = search_commits(
+            ro_conn, "Add rate limiting\n\nAdds rate limiting to the API.", embedder, limit=5
+        )
+
+    assert results[0].source_path == "abc123"
+    assert results[0].layer == "commit"
+    assert results[0].committed_at is not None
+
+
+def test_search_commits_time_filter(db_conn: psycopg.Connection, migrated_db: MigratedDb) -> None:
+    project_id = upsert_project(db_conn, _fake_repo())
+    embedder = FakeEmbedder()
+    detail = CommitDetail(
+        files=[
+            CommitFile(filename="src/f.py", additions=1, deletions=0, patch="@@ -1 +1,2 @@\n+x\n")
+        ],
+        additions=1,
+        deletions=0,
+    )
+
+    old_info = CommitInfo(
+        sha="old111", message="Old change", author="pavle-K", committed_at="2020-01-01T00:00:00Z"
+    )
+    new_info = CommitInfo(
+        sha="new222", message="New change", author="pavle-K", committed_at="2026-01-01T00:00:00Z"
+    )
+    sync_commit(db_conn, project_id, old_info, detail, embedder, FakeLLMClient())
+    sync_commit(db_conn, project_id, new_info, detail, embedder, FakeLLMClient())
+    db_conn.commit()
+
+    with psycopg.connect(migrated_db.app_ro_url) as ro_conn:
+        results = search_commits(
+            ro_conn, "change", embedder, limit=10, since=dt.datetime(2025, 1, 1, tzinfo=dt.UTC)
+        )
+
+    shas = {r.source_path for r in results}
+    assert "new222" in shas
+    assert "old111" not in shas
