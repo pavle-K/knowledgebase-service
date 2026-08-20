@@ -1,0 +1,20 @@
+[
+  {
+    "name": "knowledgebase-service",
+    "full_name": "pavle-K/knowledgebase-service",
+    "html_url": "https://github.com/pavle-K/knowledgebase-service",
+    "description": "Personal system knowledge API",
+    "default_branch": "main",
+    "private": false,
+    "fork": false
+  },
+  {
+    "name": "some-fork",
+    "full_name": "pavle-K/some-fork",
+    "html_url": "https://github.com/pavle-K/some-fork",
+    "description": "A fork, should be excluded from ingestion",
+    "default_branch": "main",
+    "private": false,
+    "fork": true
+  }
+]
