@@ -1,0 +1,42 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Lint
+        run: |
+          ruff check .
+          ruff format --check .
+
+      - name: Type check
+        run: mypy src/
+
+      - name: Test with coverage
+        run: pytest --cov=src --cov-report=term-missing
+
+      - name: Smoke test /healthz
+        run: |
+          uvicorn src.main:app --host 127.0.0.1 --port 8000 &
+          for i in $(seq 1 10); do
+            curl -sf http://127.0.0.1:8000/healthz && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8000/healthz | grep -q '"status":"ok"'
