@@ -23,6 +23,15 @@ _GRAPH_PATTERNS = [
     r"\bblast radius\b",
 ]
 
+# "which projects depend on other projects of mine" shares vocabulary with a
+# single-target impact question but is actually a structural listing query - no
+# specific interface is named, so graph's extraction step could never resolve one.
+_AGGREGATE_OVERRIDE_PATTERNS = [
+    r"\bother projects? of mine\b",
+    r"\beach other\b",
+    r"\bone another\b",
+]
+
 _TIME_PATTERNS = [
     r"\b(?:past|last) (?:week|month|year|\d+ days?)\b",
     r"\bthis week\b",
@@ -47,13 +56,17 @@ _HYBRID_TRIGGER_PATTERNS = [
 def classify_intent(query: str) -> Intent:
     q = query.lower()
 
-    if any(re.search(p, q) for p in _GRAPH_PATTERNS):
+    is_graph_signal = any(re.search(p, q) for p in _GRAPH_PATTERNS)
+    is_aggregate_override = any(re.search(p, q) for p in _AGGREGATE_OVERRIDE_PATTERNS)
+    if is_graph_signal and not is_aggregate_override:
         return "graph"
 
     if any(re.search(p, q) for p in _TIME_PATTERNS):
         return "time"
 
-    is_sql = any(re.search(p, q) for p in _SQL_PATTERNS)
+    # aggregate_override phrases ("each other", etc.) are themselves a structural/sql
+    # signal, regardless of whether they also match a _SQL_PATTERNS phrasing.
+    is_sql = is_aggregate_override or any(re.search(p, q) for p in _SQL_PATTERNS)
     is_hybrid_signal = any(re.search(p, q) for p in _HYBRID_TRIGGER_PATTERNS)
 
     if is_sql and is_hybrid_signal:

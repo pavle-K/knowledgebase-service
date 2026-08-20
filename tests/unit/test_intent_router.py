@@ -35,6 +35,10 @@ CASES = [
     ("what happened today", "time"),
     ("what did I do yesterday", "time"),
     ("show me recent activity", "time"),
+    # --- sql: aggregate "depend on" phrasings that share vocabulary with graph
+    #     but name no specific target, so graph extraction could never resolve one ---
+    ("which of my projects depend on other projects of mine", "sql"),
+    ("do any of my projects depend on each other", "sql"),
 ]
 
 
