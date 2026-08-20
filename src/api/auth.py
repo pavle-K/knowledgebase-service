@@ -1,7 +1,8 @@
-"""Bearer token auth, applied to everything except /healthz.
+"""Bearer token auth, applied to everything except /healthz and /webhook/github.
 
-/webhook/github (Stage 9) will use HMAC instead and gets added to EXEMPT_PATHS
-then - it doesn't exist yet, so there's nothing to exempt for it now.
+/webhook/github uses HMAC (X-Hub-Signature-256) instead, verified separately
+in the webhook route itself - it's exempt here so that check even gets a chance
+to run.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from collections.abc import Awaitable, Callable
 from fastapi import Request, Response
 from starlette.responses import JSONResponse
 
-EXEMPT_PATHS = {"/healthz"}
+EXEMPT_PATHS = {"/healthz", "/webhook/github"}
 
 
 async def auth_middleware(
