@@ -68,6 +68,9 @@ def _context_label(result: SearchResult) -> str:
     if result.layer == "code" and result.symbol_name:
         symbol = f"{result.symbol_type} {result.symbol_name}"
         return f"{result.project_name} - {result.source_path} ({symbol})"
+    if result.layer == "commit" and result.committed_at:
+        date = result.committed_at.date().isoformat()
+        return f"{result.project_name} - commit {result.source_path[:8]} ({date})"
     return f"{result.project_name} - {result.source_path}"
 
 

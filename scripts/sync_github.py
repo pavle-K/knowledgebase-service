@@ -1,20 +1,19 @@
-"""Seed sync: fetch repos, docs (L1), code (L2), and the dependency graph (L3).
-
-Manifest-first for L3; static analysis only catches drift. Commits (L4) arrive later.
-"""
+"""Seed sync: fetch repos, docs (L1), code (L2), the dependency graph (L3), and commits (L4)."""
 
 from __future__ import annotations
 
 import os
 import sys
 import uuid
+from collections import Counter
 
 import psycopg
 
 from src.ingestion.chunker_code import detect_language, is_candidate_code_file
 from src.ingestion.code import sync_code_file
+from src.ingestion.commits import sync_commit
 from src.ingestion.documents import record_ingestion_log, sync_document, upsert_project
-from src.ingestion.embedder import get_embedder
+from src.ingestion.embedder import Embedder, get_embedder
 from src.ingestion.github_client import GitHubClient, RepoInfo
 from src.ingestion.graph import (
     set_manifest_missing,
@@ -31,8 +30,13 @@ from src.ingestion.graph_static_analysis import (
     parse_requirements_txt,
 )
 from src.ingestion.manifest import ManifestError, parse_manifest
+from src.query.synthesizer import LLMClient, get_llm_client
 
 STAT_KEYS = ("chunks", "embedded", "skipped_unchanged", "skipped_secret")
+
+# LLM summarization costs real money per commit (unlike embeddings) - capped
+# deliberately for the seed sync. Raise this once cost/behavior is confirmed.
+MAX_COMMITS_PER_REPO = 30
 
 PACKAGE_MANIFEST_PARSERS = {
     "requirements.txt": parse_requirements_txt,
@@ -82,6 +86,24 @@ def _sync_static_analysis_for_file(
     return edges
 
 
+def _sync_commits_for_repo(
+    conn: psycopg.Connection,
+    client: GitHubClient,
+    repo: RepoInfo,
+    project_id: uuid.UUID,
+    embedder: Embedder,
+    llm: LLMClient,
+) -> Counter[str]:
+    counts: Counter[str] = Counter()
+    for info in client.list_commits(repo.full_name, MAX_COMMITS_PER_REPO):
+        detail = client.get_commit_detail(repo.full_name, info.sha)
+        if detail is None:
+            continue
+        status = sync_commit(conn, project_id, info, detail, embedder, llm)
+        counts[status] += 1
+    return counts
+
+
 def main() -> int:
     github_token = os.environ.get("GITHUB_TOKEN")
     database_url = os.environ.get("DATABASE_URL_RW")
@@ -90,6 +112,7 @@ def main() -> int:
         return 1
 
     embedder = get_embedder()
+    llm = get_llm_client()
     client = GitHubClient(token=github_token)
 
     with psycopg.connect(database_url) as conn:
@@ -142,10 +165,15 @@ def main() -> int:
                 conn, "manual", project_id, "graph", "success", {"static_edges": graph_edges}
             )
 
+            commit_counts = _sync_commits_for_repo(conn, client, repo, project_id, embedder, llm)
+            record_ingestion_log(
+                conn, "manual", project_id, "commits", "success", dict(commit_counts)
+            )
+
             conn.commit()
             print(
                 f"  {repo.full_name}: docs={doc_totals} code={code_totals} "
-                f"graph_static_edges={graph_edges}"
+                f"graph_static_edges={graph_edges} commits={dict(commit_counts)}"
             )
 
     client.close()

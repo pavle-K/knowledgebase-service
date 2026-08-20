@@ -118,3 +118,68 @@ def test_list_all_files_returns_empty_on_409_empty_repo() -> None:
 
     client = GitHubClient(token="fake-token")
     assert client.list_all_files("pavle-K/empty-repo", "main") == []
+
+
+@respx.mock
+def test_list_commits_parses_message_author_and_date() -> None:
+    respx.get(f"{GITHUB_API_BASE}/repos/pavle-K/demo/commits", params={"page": "1"}).mock(
+        return_value=httpx.Response(200, json=_load("commits_list.json"))
+    )
+
+    client = GitHubClient(token="fake-token")
+    commits = client.list_commits("pavle-K/demo", max_count=10)
+
+    assert len(commits) == 2
+    assert commits[0].sha == "abc123"
+    assert commits[0].message == "Add rate limiting"
+    assert commits[0].author == "pavle-K"
+    assert commits[0].committed_at == "2026-01-15T10:00:00Z"
+
+
+@respx.mock
+def test_list_commits_stops_at_max_count() -> None:
+    respx.get(f"{GITHUB_API_BASE}/repos/pavle-K/demo/commits", params={"page": "1"}).mock(
+        return_value=httpx.Response(200, json=_load("commits_list.json"))
+    )
+
+    client = GitHubClient(token="fake-token")
+    commits = client.list_commits("pavle-K/demo", max_count=1)
+
+    assert len(commits) == 1
+
+
+@respx.mock
+def test_list_commits_returns_empty_on_409_empty_repo() -> None:
+    respx.get(f"{GITHUB_API_BASE}/repos/pavle-K/empty/commits", params={"page": "1"}).mock(
+        return_value=httpx.Response(409, json={"message": "Git Repository is empty."})
+    )
+
+    client = GitHubClient(token="fake-token")
+    assert client.list_commits("pavle-K/empty", max_count=10) == []
+
+
+@respx.mock
+def test_get_commit_detail_parses_files_and_stats() -> None:
+    respx.get(f"{GITHUB_API_BASE}/repos/pavle-K/demo/commits/abc123").mock(
+        return_value=httpx.Response(200, json=_load("commit_detail.json"))
+    )
+
+    client = GitHubClient(token="fake-token")
+    detail = client.get_commit_detail("pavle-K/demo", "abc123")
+
+    assert detail is not None
+    assert detail.additions == 12
+    assert detail.deletions == 2
+    assert len(detail.files) == 1
+    assert detail.files[0].filename == "src/guardrails.py"
+    assert detail.files[0].patch is not None
+
+
+@respx.mock
+def test_get_commit_detail_returns_none_on_404() -> None:
+    respx.get(f"{GITHUB_API_BASE}/repos/pavle-K/demo/commits/deadbeef").mock(
+        return_value=httpx.Response(404, json={"message": "Not Found"})
+    )
+
+    client = GitHubClient(token="fake-token")
+    assert client.get_commit_detail("pavle-K/demo", "deadbeef") is None

@@ -1,0 +1,17 @@
+{
+  "sha": "abc123",
+  "commit": {
+    "author": {"name": "pavle-K", "email": "x@example.com", "date": "2026-01-15T10:00:00Z"},
+    "message": "Add rate limiting"
+  },
+  "stats": {"additions": 12, "deletions": 2, "total": 14},
+  "files": [
+    {
+      "filename": "src/guardrails.py",
+      "additions": 12,
+      "deletions": 2,
+      "changes": 14,
+      "patch": "@@ -1,2 +1,3 @@\n def f():\n+    pass\n     return 1\n"
+    }
+  ]
+}
