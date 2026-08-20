@@ -1,7 +1,7 @@
 -include .env
 export
 
-.PHONY: test test-unit lint db-up migrate
+.PHONY: test test-unit lint db-up migrate sync-local
 
 VENV := .venv/bin
 
@@ -21,3 +21,6 @@ db-up:
 
 migrate:
 	$(VENV)/python scripts/migrate.py
+
+sync-local:
+	$(VENV)/python scripts/sync_github.py

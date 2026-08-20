@@ -45,10 +45,12 @@ def migrated_db() -> Iterator[MigratedDb]:
 
     with conn:
         with conn.transaction():
-            conn.execute("drop role if exists app_rw")
-            conn.execute("drop role if exists app_ro")
+            # Drop the schema (and the grants it holds) before the roles - a role can't be
+            # dropped while grants referencing it still exist.
             conn.execute("drop schema public cascade")
             conn.execute("create schema public")
+            conn.execute("drop role if exists app_rw")
+            conn.execute("drop role if exists app_ro")
 
         apply_pending(
             conn,

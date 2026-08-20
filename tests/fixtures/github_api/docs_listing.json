@@ -1,0 +1,17 @@
+[
+  {
+    "name": "architecture.md",
+    "path": "docs/architecture.md",
+    "type": "file"
+  },
+  {
+    "name": "diagram.png",
+    "path": "docs/diagram.png",
+    "type": "file"
+  },
+  {
+    "name": "adr",
+    "path": "docs/adr",
+    "type": "dir"
+  }
+]
