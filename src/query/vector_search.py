@@ -115,13 +115,35 @@ def search_commits(
     ]
 
 
+_LAYER_ALIASES = {
+    "documents": "document",
+    "document": "document",
+    "code": "code",
+    "code_chunks": "code",
+    "commits": "commit",
+    "commit": "commit",
+}
+
+
 def search_all(
-    conn: psycopg.Connection, query: str, embedder: Embedder, limit: int = 5
+    conn: psycopg.Connection,
+    query: str,
+    embedder: Embedder,
+    limit: int = 5,
+    layers: list[str] | None = None,
 ) -> list[SearchResult]:
-    combined = [
-        *search_documents(conn, query, embedder, limit=limit),
-        *search_code_chunks(conn, query, embedder, limit=limit),
-        *search_commits(conn, query, embedder, limit=limit),
-    ]
+    active = (
+        {_LAYER_ALIASES.get(name.lower(), name.lower()) for name in layers}
+        if layers
+        else {"document", "code", "commit"}
+    )
+
+    combined: list[SearchResult] = []
+    if "document" in active:
+        combined.extend(search_documents(conn, query, embedder, limit=limit))
+    if "code" in active:
+        combined.extend(search_code_chunks(conn, query, embedder, limit=limit))
+    if "commit" in active:
+        combined.extend(search_commits(conn, query, embedder, limit=limit))
     combined.sort(key=lambda r: r.distance)
     return combined[:limit]
