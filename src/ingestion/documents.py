@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
+from collections.abc import Mapping
 from typing import cast
 
 import psycopg
@@ -54,7 +55,7 @@ def record_ingestion_log(
     project_id: uuid.UUID | None,
     layer: str,
     status: str,
-    detail: dict[str, int],
+    detail: Mapping[str, int | str],
 ) -> None:
     conn.execute(
         "insert into ingestion_log (source, project_id, layer, status, detail)"
