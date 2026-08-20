@@ -1,0 +1,25 @@
+{
+  "ref": "refs/heads/main",
+  "before": "ccc111",
+  "after": "ddd222",
+  "repository": {
+    "name": "demo-repo",
+    "full_name": "pavle-K/demo-repo",
+    "html_url": "https://github.com/pavle-K/demo-repo",
+    "description": "demo repo",
+    "default_branch": "main",
+    "private": false,
+    "fork": false
+  },
+  "commits": [
+    {
+      "id": "ddd222",
+      "message": "Add rate limiting to app.py",
+      "timestamp": "2026-01-15T10:00:00Z",
+      "author": { "name": "pavle-K" },
+      "added": [],
+      "removed": [],
+      "modified": ["src/app.py"]
+    }
+  ]
+}
