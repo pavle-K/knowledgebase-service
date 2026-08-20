@@ -1,0 +1,134 @@
+# ---------- Secrets & local config ----------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+id_rsa*
+credentials
+.aws/
+secrets.yaml
+secrets.yml
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib60/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+.python-version
+
+# ---------- Testing & coverage ----------
+.pytest_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.cache
+nosetests.xml
+*.cover
+.hypothesis/
+
+# ---------- Type checking & linting ----------
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.ruff_cache/
+.pytype/
+.pyre/
+
+# ---------- Terraform ----------
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.*
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+!example.tfvars
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+tfplan
+*.tfplan
+
+# ---------- AWS / deployment artifacts ----------
+lambda_package.zip
+*.zip
+.serverless/
+.aws-sam/
+
+# ---------- Docker ----------
+docker-compose.override.yml
+
+# ---------- Node (only if you add a web widget / JS tooling) ----------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.next/
+out/
+
+# ---------- Local data, dumps & scratch ----------
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.sql.gz
+data/
+tmp/
+scratch/
+.ipynb_checkpoints/
+
+# Embedding / model caches
+.cache/
+embeddings_cache/
+.huggingface/
+.tiktoken_cache/
+
+# ---------- Logs ----------
+*.log
+logs/
+
+# ---------- Editors & OS ----------
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------- Claude ----------
+CLAUDE.md
