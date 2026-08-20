@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 
-Intent = str  # 'graph' | 'sql' | 'hybrid' | 'vector'
+Intent = str  # 'graph' | 'sql' | 'hybrid' | 'vector' | 'time'
 
 _GRAPH_PATTERNS = [
     r"\bwhat(?:'s| is| would| will)? break",
@@ -21,6 +21,14 @@ _GRAPH_PATTERNS = [
     r"\bif i change\b",
     r"\bif we change\b",
     r"\bblast radius\b",
+]
+
+_TIME_PATTERNS = [
+    r"\b(?:past|last) (?:week|month|year|\d+ days?)\b",
+    r"\bthis week\b",
+    r"\btoday\b",
+    r"\byesterday\b",
+    r"\brecent(?:ly)?\b",
 ]
 
 _SQL_PATTERNS = [
@@ -41,6 +49,9 @@ def classify_intent(query: str) -> Intent:
 
     if any(re.search(p, q) for p in _GRAPH_PATTERNS):
         return "graph"
+
+    if any(re.search(p, q) for p in _TIME_PATTERNS):
+        return "time"
 
     is_sql = any(re.search(p, q) for p in _SQL_PATTERNS)
     is_hybrid_signal = any(re.search(p, q) for p in _HYBRID_TRIGGER_PATTERNS)

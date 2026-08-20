@@ -29,6 +29,12 @@ CASES = [
     ("what does the pr-review-bot project do", "vector"),
     # --- hybrid: explicit compound signal ---
     ("list all projects that use Postgres and also summarize what they do", "hybrid"),
+    # --- time: explicit recency scoping (must not fall through to plain vector) ---
+    ("what did this user work on in the past week", "time"),
+    ("what changed last month", "time"),
+    ("what happened today", "time"),
+    ("what did I do yesterday", "time"),
+    ("show me recent activity", "time"),
 ]
 
 

@@ -1,10 +1,12 @@
+import datetime as dt
 import uuid
 
 import psycopg
 
+from src.ingestion.commits import sync_commit
 from src.ingestion.documents import upsert_project
 from src.ingestion.embedder import FakeEmbedder, format_vector
-from src.ingestion.github_client import RepoInfo
+from src.ingestion.github_client import CommitDetail, CommitFile, CommitInfo, RepoInfo
 from src.query.query_engine import run_query_engine
 from src.query.synthesizer import FakeLLMClient
 
@@ -141,3 +143,41 @@ def test_hybrid_intent_runs_both_sql_and_vector_nodes(db_conn: psycopg.Connectio
     assert state["sql_result"].error is None
     assert len(state["vector_results"]) > 0
     assert llm.call_count == 2  # generate_sql + hybrid synthesis
+
+
+def test_time_intent_only_returns_commits_within_range(db_conn: psycopg.Connection) -> None:
+    project = _fake_repo("time-proj")
+    project_id = upsert_project(db_conn, project)
+    embedder = FakeEmbedder()
+    detail = CommitDetail(
+        files=[
+            CommitFile(filename="src/f.py", additions=1, deletions=0, patch="@@ -1 +1,2 @@\n+x\n")
+        ],
+        additions=1,
+        deletions=0,
+    )
+
+    now = dt.datetime.now(dt.UTC)
+    recent = CommitInfo(
+        sha="recent1",
+        message="Recent work",
+        author="pavle-K",
+        committed_at=(now - dt.timedelta(days=2)).isoformat(),
+    )
+    old = CommitInfo(
+        sha="old1",
+        message="Old work",
+        author="pavle-K",
+        committed_at=(now - dt.timedelta(days=90)).isoformat(),
+    )
+    sync_commit(db_conn, project_id, recent, detail, embedder, FakeLLMClient())
+    sync_commit(db_conn, project_id, old, detail, embedder, FakeLLMClient())
+
+    llm = FakeLLMClient(response="You worked on recent work.")
+    state = run_query_engine(db_conn, embedder, llm, "what did this user work on in the past week")
+
+    assert state["intent"] == "time"
+    shas = {r.source_path for r in state["vector_results"]}
+    assert "recent1" in shas
+    assert "old1" not in shas
+    assert llm.call_count == 1  # only synthesis - time parsing is deterministic, no LLM call
