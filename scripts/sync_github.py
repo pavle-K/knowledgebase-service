@@ -1,6 +1,6 @@
-"""Seed sync: fetch GitHub repos + READMEs/docs (L1), embed, upsert - idempotent via content_hash.
+"""Seed sync: fetch repos, docs (L1) and code (L2), embed, upsert - idempotent via content_hash.
 
-Only handles L1 (documents) at this stage; code/graph/commits arrive in later stages.
+Graph/commits arrive in later stages.
 """
 
 from __future__ import annotations
@@ -10,11 +10,18 @@ import sys
 
 import psycopg
 
+from src.ingestion.chunker_code import is_candidate_code_file
+from src.ingestion.code import sync_code_file
 from src.ingestion.documents import record_ingestion_log, sync_document, upsert_project
 from src.ingestion.embedder import get_embedder
 from src.ingestion.github_client import GitHubClient
 
-DOC_STAT_KEYS = ("chunks", "embedded", "skipped_unchanged", "skipped_secret")
+STAT_KEYS = ("chunks", "embedded", "skipped_unchanged", "skipped_secret")
+
+
+def _accumulate(totals: dict[str, int], stats: dict[str, int]) -> None:
+    for key in STAT_KEYS:
+        totals[key] += stats[key]
 
 
 def main() -> int:
@@ -33,25 +40,34 @@ def main() -> int:
 
         for repo in repos:
             project_id = upsert_project(conn, repo)
-            totals = dict.fromkeys(DOC_STAT_KEYS, 0)
 
+            doc_totals = dict.fromkeys(STAT_KEYS, 0)
             readme = client.get_readme(repo.full_name)
             if readme:
-                stats = sync_document(conn, project_id, "readme", "README.md", readme, embedder)
-                for key in DOC_STAT_KEYS:
-                    totals[key] += stats[key]
-
+                _accumulate(
+                    doc_totals,
+                    sync_document(conn, project_id, "readme", "README.md", readme, embedder),
+                )
             for doc_path in client.list_docs_files(repo.full_name):
                 content = client.get_file(repo.full_name, doc_path)
-                if content is None:
-                    continue
-                stats = sync_document(conn, project_id, "docs", doc_path, content, embedder)
-                for key in DOC_STAT_KEYS:
-                    totals[key] += stats[key]
+                if content is not None:
+                    _accumulate(
+                        doc_totals,
+                        sync_document(conn, project_id, "docs", doc_path, content, embedder),
+                    )
+            record_ingestion_log(conn, "manual", project_id, "documents", "success", doc_totals)
 
-            record_ingestion_log(conn, "manual", project_id, "documents", "success", totals)
+            code_totals = dict.fromkeys(STAT_KEYS, 0)
+            all_files = client.list_all_files(repo.full_name, repo.default_branch)
+            for file_path in filter(is_candidate_code_file, all_files):
+                content = client.get_file(repo.full_name, file_path)
+                if content is not None:
+                    stats = sync_code_file(conn, project_id, file_path, content, embedder)
+                    _accumulate(code_totals, stats)
+            record_ingestion_log(conn, "manual", project_id, "code", "success", code_totals)
+
             conn.commit()
-            print(f"  {repo.full_name}: {totals}")
+            print(f"  {repo.full_name}: docs={doc_totals} code={code_totals}")
 
     client.close()
     return 0

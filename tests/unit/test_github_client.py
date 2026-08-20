@@ -85,3 +85,36 @@ def test_get_file_decodes_base64() -> None:
     content = client.get_file("pavle-K/knowledgebase-service", "docs/architecture.md")
 
     assert content == "# Architecture\ndetails here\n"
+
+
+@respx.mock
+def test_list_all_files_returns_only_blobs() -> None:
+    respx.get(f"{GITHUB_API_BASE}/repos/pavle-K/knowledgebase-service/git/trees/main").mock(
+        return_value=httpx.Response(200, json=_load("tree_listing.json"))
+    )
+
+    client = GitHubClient(token="fake-token")
+    files = client.list_all_files("pavle-K/knowledgebase-service", "main")
+
+    assert files == ["README.md", "src/main.py", "node_modules/pkg/index.js"]
+
+
+@respx.mock
+def test_list_all_files_returns_empty_on_404() -> None:
+    respx.get(f"{GITHUB_API_BASE}/repos/pavle-K/empty/git/trees/main").mock(
+        return_value=httpx.Response(404, json={"message": "Not Found"})
+    )
+
+    client = GitHubClient(token="fake-token")
+    assert client.list_all_files("pavle-K/empty", "main") == []
+
+
+@respx.mock
+def test_list_all_files_returns_empty_on_409_empty_repo() -> None:
+    # GitHub returns 409, not 404, for a repo with no commits yet.
+    respx.get(f"{GITHUB_API_BASE}/repos/pavle-K/empty-repo/git/trees/main").mock(
+        return_value=httpx.Response(409, json={"message": "Git Repository is empty."})
+    )
+
+    client = GitHubClient(token="fake-token")
+    assert client.list_all_files("pavle-K/empty-repo", "main") == []

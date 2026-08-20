@@ -91,3 +91,15 @@ class GitHubClient:
         return [
             item["path"] for item in data if item["type"] == "file" and item["name"].endswith(".md")
         ]
+
+    def list_all_files(self, full_name: str, ref: str) -> list[str]:
+        response = self._client.get(
+            f"/repos/{full_name}/git/trees/{ref}", params={"recursive": "1"}
+        )
+        # 404: ref not found. 409: empty repo (no commits yet) - GitHub's quirky status
+        # for this case. Both mean "nothing to list", not an error.
+        if response.status_code in (404, 409):
+            return []
+        response.raise_for_status()
+        data = response.json()
+        return [item["path"] for item in data.get("tree", []) if item["type"] == "blob"]

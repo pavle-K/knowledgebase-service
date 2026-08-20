@@ -61,7 +61,14 @@ def get_llm_client() -> LLMClient:
 def format_context(results: list[SearchResult]) -> str:
     if not results:
         return "No matching documents were found."
-    return "\n\n".join(f"[{r.project_name} - {r.source_path}]\n{r.content}" for r in results)
+    return "\n\n".join(f"[{_context_label(r)}]\n{r.content}" for r in results)
+
+
+def _context_label(result: SearchResult) -> str:
+    if result.layer == "code" and result.symbol_name:
+        symbol = f"{result.symbol_type} {result.symbol_name}"
+        return f"{result.project_name} - {result.source_path} ({symbol})"
+    return f"{result.project_name} - {result.source_path}"
 
 
 def synthesize(query: str, results: list[SearchResult], llm: LLMClient) -> str:
