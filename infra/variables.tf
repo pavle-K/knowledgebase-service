@@ -77,3 +77,24 @@ variable "llm_model" {
   type    = string
   default = "claude-haiku-4-5-20251001"
 }
+
+# Bounds embedding + LLM cost per /v1/query request - see src/api/schemas.py.
+variable "max_query_length" {
+  type    = string
+  default = "2000"
+}
+
+# API Gateway throttle: global circuit breaker, not a per-key quota. Typed as
+# string, not number - CI passes these as TF_VAR_* from a GitHub Actions
+# variable, and an unset one becomes an empty string, which a number-typed
+# variable would reject outright. api_gateway.tf falls back to the numeric
+# defaults below when empty, via a local rather than the variable default.
+variable "api_throttle_rate_limit" {
+  type    = string
+  default = "20"
+}
+
+variable "api_throttle_burst_limit" {
+  type    = string
+  default = "40"
+}

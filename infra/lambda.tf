@@ -52,6 +52,7 @@ resource "aws_lambda_function" "app" {
       GITHUB_WEBHOOK_SECRET  = var.github_webhook_secret
       EMBEDDING_PROVIDER     = var.embedding_provider
       LLM_MODEL              = var.llm_model
+      MAX_QUERY_LENGTH       = var.max_query_length
     }
   }
 }

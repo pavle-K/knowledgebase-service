@@ -2,11 +2,23 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+import os
+
+from pydantic import BaseModel, Field
+
+
+def _max_query_length(raw: str | None) -> int:
+    return int(raw) if raw else 2000
+
+
+# Bounds embedding + LLM cost per request. Overridable via MAX_QUERY_LENGTH -
+# read once at import time, matching how Lambda env vars are fixed for the
+# life of the execution environment.
+MAX_QUERY_LENGTH = _max_query_length(os.environ.get("MAX_QUERY_LENGTH"))
 
 
 class QueryRequest(BaseModel):
-    query: str
+    query: str = Field(max_length=MAX_QUERY_LENGTH)
     layers: list[str] | None = None
 
 
