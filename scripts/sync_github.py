@@ -11,6 +11,7 @@ from src.ingestion.chunker_code import is_candidate_code_file
 from src.ingestion.code import sync_code_file
 from src.ingestion.documents import record_ingestion_log, sync_document, upsert_project
 from src.ingestion.embedder import get_embedder
+from src.ingestion.exclusion import EXCLUDE_MARKER_PATH, is_excluded, purge_project_data
 from src.ingestion.github_client import GitHubClient
 from src.ingestion.repo_sync import (
     PACKAGE_MANIFEST_PARSERS,
@@ -45,6 +46,17 @@ def main() -> int:
 
         for repo in repos:
             project_id = upsert_project(conn, repo)
+
+            if is_excluded(client, repo.full_name):
+                purge_counts = purge_project_data(conn, project_id)
+                record_ingestion_log(
+                    conn, "manual", project_id, "exclusion", "success", purge_counts
+                )
+                conn.commit()
+                print(
+                    f"  {repo.full_name}: excluded ({EXCLUDE_MARKER_PATH}) - purged {purge_counts}"
+                )
+                continue
 
             doc_totals = dict.fromkeys(STAT_KEYS, 0)
             readme = client.get_readme(repo.full_name)

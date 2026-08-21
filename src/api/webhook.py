@@ -19,6 +19,7 @@ from src.ingestion.code import sync_code_file
 from src.ingestion.commits import sync_commit
 from src.ingestion.documents import record_ingestion_log, sync_document, upsert_project
 from src.ingestion.embedder import Embedder
+from src.ingestion.exclusion import is_excluded, purge_project_data
 from src.ingestion.github_client import CommitInfo, GitHubClient, RepoInfo
 from src.ingestion.repo_sync import sync_manifest_for_repo, sync_static_analysis_for_file
 from src.ingestion.webhook_layers import affected_layers
@@ -53,6 +54,14 @@ def _handle_push(
 ) -> dict[str, Any]:
     repo = _repo_from_payload(payload["repository"])
     project_id = upsert_project(conn, repo)
+
+    if is_excluded(client, repo.full_name):
+        purge_counts = purge_project_data(conn, project_id)
+        record_ingestion_log(
+            conn, "github_webhook", project_id, "exclusion", "success", purge_counts
+        )
+        conn.commit()
+        return {"status": "excluded", **purge_counts}
 
     changed_files: set[str] = set()
     for commit in payload.get("commits", []):

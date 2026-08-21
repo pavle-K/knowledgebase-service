@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from src.api.dependencies import get_conn_rw, get_embedder_dep, get_llm_dep
 from src.ingestion.embedder import FakeEmbedder
+from src.ingestion.exclusion import EXCLUDE_MARKER_PATH
 from src.ingestion.github_client import GITHUB_API_BASE
 from src.main import app
 from src.query.synthesizer import FakeLLMClient
@@ -21,6 +22,12 @@ from tests.integration.conftest import db_conn, migrated_db  # noqa: F401
 
 WEBHOOK_SECRET = "test-webhook-secret"
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "payloads"
+
+
+def _mock_not_excluded(full_name: str) -> None:
+    respx.get(f"{GITHUB_API_BASE}/repos/{full_name}/contents/{EXCLUDE_MARKER_PATH}").mock(
+        return_value=httpx.Response(404, json={"message": "Not Found"})
+    )
 
 
 def _load_unique_payload(name: str) -> dict:
@@ -104,6 +111,7 @@ def test_readme_only_push_syncs_l1_and_leaves_code_untouched(
 ) -> None:
     payload = _load_unique_payload("push_readme_only.json")
     full_name = payload["repository"]["full_name"]
+    _mock_not_excluded(full_name)
 
     readme_b64 = base64.b64encode(b"# Demo\nUpdated content.\n").decode()
     respx.get(f"{GITHUB_API_BASE}/repos/{full_name}/contents/README.md").mock(
@@ -145,6 +153,7 @@ def test_code_push_syncs_code_and_commit_layers(
     payload = _load_unique_payload("push_code_change.json")
     full_name = payload["repository"]["full_name"]
     sha = payload["commits"][0]["id"]
+    _mock_not_excluded(full_name)
 
     code_b64 = base64.b64encode(b"def rate_limit():\n    return True\n").decode()
     respx.get(f"{GITHUB_API_BASE}/repos/{full_name}/contents/src/app.py").mock(
@@ -291,6 +300,7 @@ def test_project_yaml_push_syncs_graph_layer(
             }
         ],
     }
+    _mock_not_excluded(full_name)
     manifest_b64 = base64.b64encode(b"name: demo\ntechnologies: [python]\n").decode()
     respx.get(f"{GITHUB_API_BASE}/repos/{full_name}/contents/project.yaml").mock(
         return_value=httpx.Response(200, json={"content": manifest_b64, "encoding": "base64"})
@@ -339,6 +349,7 @@ def test_push_only_ingests_commits_that_touch_code(
         ],
     }
     with respx.mock:
+        _mock_not_excluded(full_name)
         readme_b64 = base64.b64encode(b"# Demo\n").decode()
         respx.get(f"{GITHUB_API_BASE}/repos/{full_name}/contents/README.md").mock(
             return_value=httpx.Response(200, json={"content": readme_b64, "encoding": "base64"})
@@ -348,3 +359,56 @@ def test_push_only_ingests_commits_that_touch_code(
     assert response.status_code == 200
     body = response.json()
     assert body["commits_synced"] == 0  # README-only commit never reaches L4
+
+
+@respx.mock
+def test_push_to_excluded_repo_purges_existing_data_and_skips_ingestion(
+    client: TestClient,
+    db_conn: psycopg.Connection,  # noqa: F811
+) -> None:
+    payload = _load_unique_payload("push_readme_only.json")
+    full_name = payload["repository"]["full_name"]
+    html_url = payload["repository"]["html_url"]
+
+    # Pre-existing data from before the repo was excluded.
+    project_row = db_conn.execute(
+        """
+        insert into projects (name, repo_url, source, default_branch, is_private)
+        values (%s, %s, 'github', 'main', false)
+        returning id
+        """,
+        (payload["repository"]["name"], html_url),
+    ).fetchone()
+    assert project_row is not None
+    project_id = project_row[0]
+    db_conn.execute(
+        """
+        insert into documents
+            (project_id, doc_type, source_path, chunk_index, content, content_hash)
+        values (%s, 'readme', 'README.md', 0, 'old content', 'hash1')
+        """,
+        (project_id,),
+    )
+
+    # Only the exclusion-marker check is mocked - any other GitHub call
+    # respx doesn't recognize fails the test, proving nothing else ran.
+    respx.get(f"{GITHUB_API_BASE}/repos/{full_name}/contents/{EXCLUDE_MARKER_PATH}").mock(
+        return_value=httpx.Response(200, json={"content": "", "encoding": "base64"})
+    )
+
+    response = _post_webhook(client, "push", payload)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "excluded",
+        "documents": 1,
+        "code_chunks": 0,
+        "commits": 0,
+        "exposed_interfaces": 0,
+        "dependencies": 0,
+    }
+
+    doc_count = db_conn.execute(
+        "select count(*) from documents where project_id = %s", (project_id,)
+    ).fetchone()
+    assert doc_count == (0,)
