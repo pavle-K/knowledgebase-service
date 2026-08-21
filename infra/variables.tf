@@ -42,6 +42,11 @@ variable "database_url_ro" {
   sensitive = true
 }
 
+variable "database_url_ro_public" {
+  type      = string
+  sensitive = true
+}
+
 variable "anthropic_api_key" {
   type      = string
   sensitive = true
@@ -52,7 +57,13 @@ variable "openai_api_key" {
   sensitive = true
 }
 
+# Public tier: reads public projects only. api_admin_key reads everything.
 variable "api_auth_key" {
+  type      = string
+  sensitive = true
+}
+
+variable "api_admin_key" {
   type      = string
   sensitive = true
 }

@@ -24,6 +24,7 @@ jobs:
       TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
       APP_RW_PASSWORD: ci_rw_password
       APP_RO_PASSWORD: ci_ro_password
+      APP_RO_PUBLIC_PASSWORD: ci_ro_public_password
 
     steps:
       - uses: actions/checkout@v4
