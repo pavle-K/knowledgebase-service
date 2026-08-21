@@ -115,6 +115,50 @@ def test_sql_intent_routes_through_self_healing_sql_node(db_conn: psycopg.Connec
     assert llm.call_count == 2  # generate_sql + sql synthesis
 
 
+def test_sql_intent_falls_back_to_vector_on_zero_rows(db_conn: psycopg.Connection) -> None:
+    project = _fake_repo("fallback-proj")
+    project_id = upsert_project(db_conn, project)
+    embedder = FakeEmbedder()
+    content = "This project is deployed as an AWS Lambda function."
+    embedding = embedder.embed([content])[0]
+    db_conn.execute(
+        """
+        insert into documents
+            (project_id, doc_type, source_path, chunk_index, content, embedding, content_hash)
+        values (%s, 'readme', 'README.md', 0, %s, %s::vector, 'hash')
+        """,
+        (project_id, content, format_vector(embedding)),
+    )
+
+    # Valid SQL that legitimately matches nothing - e.g. an empty technologies table.
+    llm = FakeLLMClient(response="select name from projects where name = 'no-such-project'")
+
+    state = run_query_engine(db_conn, embedder, llm, "which of my projects use AWS Lambda")
+
+    assert state["intent"] == "sql"
+    assert state["sql_result"] is not None
+    assert state["sql_result"].error is None
+    assert state["sql_result"].rows == []
+    assert len(state["vector_results"]) > 0
+    assert state["confidence"] == "medium"
+    assert state["coverage_note"] is not None
+    assert "semantic search" in state["coverage_note"]
+    assert llm.call_count == 2  # generate_sql + fallback synthesis
+
+
+def test_sql_intent_does_not_fall_back_to_vector_on_error(db_conn: psycopg.Connection) -> None:
+    llm = FakeLLMClient(response="select * from not_a_real_table")
+
+    state = run_query_engine(db_conn, FakeEmbedder(), llm, "how many projects use Postgres")
+
+    assert state["intent"] == "sql"
+    assert state["sql_result"] is not None
+    assert state["sql_result"].error is not None
+    assert state["vector_results"] == []
+    assert state["confidence"] == "low"
+    assert llm.call_count == 3  # 3 self-heal attempts, all fail identically, then give up
+
+
 def test_hybrid_intent_runs_both_sql_and_vector_nodes(db_conn: psycopg.Connection) -> None:
     project = _fake_repo("hybrid-proj")
     project_id = upsert_project(db_conn, project)

@@ -77,6 +77,19 @@ def _synthesize_vector(state: QueryState, llm: LLMClient) -> tuple[str, str, str
     return summary, "medium", None
 
 
+def _synthesize_sql_fallback(state: QueryState, llm: LLMClient) -> tuple[str, str, str | None]:
+    """SQL returned zero rows (no error) and the engine fell back to vector search."""
+    if not state["vector_results"]:
+        return ("No rows matched that query.", "high", None)
+    summary = synthesize(state["query"], state["vector_results"], llm)
+    coverage_note = (
+        "No structured data matched (technologies/manifest-derived tables may be "
+        "sparse or unpopulated) - this answer is inferred from semantic search over "
+        "code and docs, not declared metadata."
+    )
+    return summary, "medium", coverage_note
+
+
 def _synthesize_hybrid(state: QueryState, llm: LLMClient) -> tuple[str, str, str | None]:
     result = state["sql_result"]
     sql_rows = result.rows if result and result.rows else []
@@ -97,6 +110,10 @@ def build_synthesis(state: QueryState, llm: LLMClient) -> tuple[str, str, str | 
     if intent == "graph":
         return _synthesize_graph(state)
     if intent == "sql":
+        result = state["sql_result"]
+        assert result is not None
+        if result.error is None and not result.rows and state["vector_results"]:
+            return _synthesize_sql_fallback(state, llm)
         return _synthesize_sql(state, llm)
     if intent == "hybrid":
         return _synthesize_hybrid(state, llm)

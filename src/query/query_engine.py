@@ -3,6 +3,12 @@
 Supersedes the Stage 3 vector-only graph. Impact analysis keeps its own separate
 minimal graph (impact_graph.py) for the deterministic /v1/impact contract - this
 engine is for /v1/query, where natural language decides the route.
+
+sql -> vector fallback: a successful SQL query that returns zero rows often means
+the structured tables it depends on (e.g. technologies/project_technologies, which
+are populated from project.yaml manifests) are sparse or unpopulated, not that the
+answer doesn't exist - documents/code_chunks may still answer it semantically. A
+genuine SQL error does NOT fall back; that's a self-heal failure, not a coverage gap.
 """
 
 from __future__ import annotations
@@ -75,6 +81,10 @@ def build_query_engine(
     graph.add_node("graph_traversal", graph_node)
     graph.add_node("synthesize", synthesize_node)
 
+    def sql_needs_vector_fallback(state: QueryState) -> bool:
+        result = state["sql_result"]
+        return result is not None and result.error is None and not result.rows
+
     graph.add_edge(START, "router")
     graph.add_conditional_edges(
         "router",
@@ -89,7 +99,9 @@ def build_query_engine(
     )
     graph.add_conditional_edges(
         "sql",
-        lambda s: "vector" if s["intent"] == "hybrid" else "synthesize",
+        lambda s: (
+            "vector" if s["intent"] == "hybrid" or sql_needs_vector_fallback(s) else "synthesize"
+        ),
         {"vector": "vector", "synthesize": "synthesize"},
     )
     graph.add_edge("vector", "synthesize")
