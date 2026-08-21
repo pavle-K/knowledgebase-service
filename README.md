@@ -151,8 +151,8 @@ Distribute `API_AUTH_KEY` to consumers that should only see public work. Keep `A
 
 `/v1/query` costs one embedding call plus up to four LLM calls (three self-heal SQL attempts, one synthesis) — a request-shaped cost surface, not a flat one. Three layers bound it:
 
-- **`query` has a hard length cap** (`MAX_QUERY_LENGTH` in `src/api/schemas.py`, 2000 characters) — rejected with `422` before it reaches an embedding or LLM call.
-- **API Gateway throttles the whole API** (`infra/api_gateway.tf`, tuned via `api_throttle_rate_limit`/`api_throttle_burst_limit` in `infra/variables.tf`) — a global circuit breaker against a request flood, not a per-key quota. Both keys share it.
+- **`query` has a hard length cap** — rejected with `422` before it reaches an embedding or LLM call. Configurable via the `MAX_QUERY_LENGTH` env var (default 2000 characters); in the deployed Lambda that's set from the `MAX_QUERY_LENGTH` GitHub Actions variable.
+- **API Gateway throttles the whole API** — a global circuit breaker against a request flood, not a per-key quota. Both keys share it. Configurable via the `API_THROTTLE_RATE_LIMIT`/`API_THROTTLE_BURST_LIMIT` GitHub Actions variables (defaults: 20 req/s steady-state, burst of 40); falls back to those defaults if either is unset.
 - **Set a hard monthly spend cap in the Anthropic Console and OpenAI's billing settings.** This is the one control that still holds if the two above are ever bypassed or misconfigured — it isn't part of this codebase, set it directly with the provider.
 
 Neither of the first two distinguishes `API_AUTH_KEY` from `API_ADMIN_KEY`, or one consumer from another — that requires per-key quotas and revocation, which this project doesn't yet have.
@@ -163,7 +163,7 @@ All endpoints except `/healthz` and `/webhook/github` require a bearer token —
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/v1/query` | `{ "query": str, "layers": [str]? }` → runs the full LangGraph engine. `query` is capped at 2000 characters. Returns `{ summary, intent, data, confidence, coverage_note, execution_time_ms }`. |
+| `POST` | `/v1/query` | `{ "query": str, "layers": [str]? }` → runs the full LangGraph engine. `query` length is capped — see [Cost controls](#cost-controls). Returns `{ summary, intent, data, confidence, coverage_note, execution_time_ms }`. |
 | `POST` | `/v1/impact` | `{ "project": str, "interface": str }` → deterministic graph traversal only, bypassing intent classification. For callers that already know they want an impact answer. |
 | `POST` | `/webhook/github` | GitHub webhook receiver. HMAC-verified via `X-Hub-Signature-256`. Handles `push`, `repository`, `release`, `ping`. |
 | `GET` | `/healthz` | Liveness check, unauthenticated. |

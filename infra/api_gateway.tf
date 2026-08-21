@@ -3,6 +3,11 @@ resource "aws_apigatewayv2_api" "app" {
   protocol_type = "HTTP"
 }
 
+locals {
+  api_throttle_rate_limit  = var.api_throttle_rate_limit != "" ? tonumber(var.api_throttle_rate_limit) : 20
+  api_throttle_burst_limit = var.api_throttle_burst_limit != "" ? tonumber(var.api_throttle_burst_limit) : 40
+}
+
 resource "aws_apigatewayv2_integration" "lambda" {
   api_id                 = aws_apigatewayv2_api.app.id
   integration_type       = "AWS_PROXY"
@@ -24,8 +29,8 @@ resource "aws_apigatewayv2_stage" "default" {
   # Global, not per-key - a circuit breaker against a flood, not a per-consumer
   # quota. Steady-state requests/sec and the burst bucket size above it.
   default_route_settings {
-    throttling_rate_limit  = var.api_throttle_rate_limit
-    throttling_burst_limit = var.api_throttle_burst_limit
+    throttling_rate_limit  = local.api_throttle_rate_limit
+    throttling_burst_limit = local.api_throttle_burst_limit
   }
 }
 

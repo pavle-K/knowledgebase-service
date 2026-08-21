@@ -21,6 +21,9 @@ env:
   TF_VAR_api_admin_key: ${{ secrets.API_ADMIN_KEY }}
   TF_VAR_embedding_provider: ${{ vars.EMBEDDING_PROVIDER }}
   TF_VAR_llm_model: ${{ vars.LLM_MODEL }}
+  TF_VAR_max_query_length: ${{ vars.MAX_QUERY_LENGTH }}
+  TF_VAR_api_throttle_rate_limit: ${{ vars.API_THROTTLE_RATE_LIMIT }}
+  TF_VAR_api_throttle_burst_limit: ${{ vars.API_THROTTLE_BURST_LIMIT }}
 
 jobs:
   deploy:
