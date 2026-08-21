@@ -7,6 +7,7 @@ on:
 
 env:
   AWS_REGION: ${{ vars.AWS_REGION }}
+  ECR_REPOSITORY: knowledgebase-service
   TF_VAR_image_tag: ${{ github.event.pull_request.head.sha }}
   TF_VAR_github_token: ${{ secrets.GH_TOKEN }}
   TF_VAR_github_webhook_secret: ${{ secrets.GH_WEBHOOK_SECRET }}
@@ -35,15 +36,20 @@ jobs:
 
       - uses: hashicorp/setup-terraform@v3
 
-      - name: Restore Terraform state
-        uses: actions/cache@v4
-        with:
-          path: infra/terraform.tfstate
-          key: tfstate-${{ env.AWS_REGION }}
-
       - name: Terraform init
         working-directory: infra
-        run: terraform init
+        run: |
+          # Assumes the bootstrap resources (infra/bootstrap/) already exist,
+          # created by a prior deploy run - a PR plan is read-only in spirit
+          # and shouldn't be the thing that first provisions shared state
+          # infra. If no deploy has ever run yet, this fails with a clear
+          # "bucket does not exist" error until one does.
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          terraform init \
+            -backend-config="bucket=${ECR_REPOSITORY}-tfstate-${ACCOUNT_ID}" \
+            -backend-config="key=${ECR_REPOSITORY}/terraform.tfstate" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="dynamodb_table=${ECR_REPOSITORY}-tfstate-lock"
 
       - name: Terraform plan
         id: plan

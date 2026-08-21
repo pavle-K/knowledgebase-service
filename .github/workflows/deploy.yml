@@ -38,23 +38,49 @@ jobs:
 
       - uses: hashicorp/setup-terraform@v3
 
-      - name: Restore Terraform state
-        uses: actions/cache@v4
-        with:
-          path: infra/terraform.tfstate
-          # No remote backend yet - this cache is a deliberate stopgap so CI
-          # applies aren't starting from a blank state every run. It has no
-          # locking and can be evicted; fine for a personal project, not a
-          # substitute for a real backend once this needs to be robust.
-          key: tfstate-${{ env.AWS_REGION }}
+      - name: Ensure remote state backend exists (bootstrap)
+        id: bootstrap
+        working-directory: infra/bootstrap
+        run: |
+          terraform init
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          BUCKET="${ECR_REPOSITORY}-tfstate-${ACCOUNT_ID}"
+          TABLE="${ECR_REPOSITORY}-tfstate-lock"
+          if aws s3api head-bucket --bucket "$BUCKET" 2>/dev/null; then
+            echo "backend resources already exist - importing into this run's (local, ephemeral) state"
+            terraform import aws_s3_bucket.tfstate "$BUCKET"
+            terraform import aws_s3_bucket_versioning.tfstate "$BUCKET"
+            terraform import aws_s3_bucket_server_side_encryption_configuration.tfstate "$BUCKET"
+            terraform import aws_s3_bucket_public_access_block.tfstate "$BUCKET"
+            terraform import aws_dynamodb_table.lock "$TABLE"
+          else
+            echo "backend resources do not exist yet - creating"
+          fi
+          terraform apply -auto-approve
+          echo "bucket=$(terraform output -raw bucket_name)" >> "$GITHUB_OUTPUT"
+          echo "table=$(terraform output -raw table_name)" >> "$GITHUB_OUTPUT"
 
       - name: Terraform init
         working-directory: infra
-        run: terraform init
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ steps.bootstrap.outputs.bucket }}" \
+            -backend-config="key=${ECR_REPOSITORY}/terraform.tfstate" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="dynamodb_table=${{ steps.bootstrap.outputs.table }}"
 
-      - name: Create ECR repository (idempotent)
+      - name: Ensure ECR repository is created and in state
         working-directory: infra
-        run: terraform apply -auto-approve -target=aws_ecr_repository.app
+        run: |
+          if terraform state show aws_ecr_repository.app >/dev/null 2>&1; then
+            echo "already tracked in state"
+          elif aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" --region "$AWS_REGION" >/dev/null 2>&1; then
+            echo "exists in AWS but not in state (e.g. cache miss on a repeat run) - importing"
+            terraform import aws_ecr_repository.app "$ECR_REPOSITORY"
+          else
+            echo "does not exist yet - creating"
+            terraform apply -auto-approve -target=aws_ecr_repository.app
+          fi
 
       - name: Login to ECR
         id: ecr-login
