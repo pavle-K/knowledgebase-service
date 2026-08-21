@@ -29,6 +29,14 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
+      - name: List non-fork repos for webhook coverage
+        id: webhook_repos
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          repos=$(gh repo list --limit 200 --json name,isFork --jq '[.[] | select(.isFork == false) | .name]')
+          echo "repos=$repos" >> "$GITHUB_OUTPUT"
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -95,6 +103,8 @@ jobs:
 
       - name: Terraform apply
         working-directory: infra
+        env:
+          TF_VAR_github_webhook_repos: ${{ steps.webhook_repos.outputs.repos }}
         run: terraform apply -auto-approve
 
       - name: Get API Gateway URL

@@ -13,9 +13,9 @@ variable "image_tag" {
   type        = string
 }
 
-# Repos to attach the GitHub webhook to. Defaults to this service's own repo
-# only - dogfooding, and it keeps scope modest rather than trying to enumerate
-# and attach across every tracked repo automatically.
+# Repos to attach the GitHub webhook to. deploy.yml/terraform-plan.yml compute
+# this dynamically (every non-fork repo on the account, via `gh repo list`) and
+# pass it as -var; the default here only applies to a manual/local apply.
 variable "github_webhook_repos" {
   type    = list(string)
   default = ["knowledgebase-service"]

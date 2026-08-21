@@ -1,0 +1,32 @@
+name: sync
+
+on:
+  # */2 on day-of-month resets at the start of each month, so the gap between
+  # runs is occasionally 1 day instead of 2 across a month boundary - accepted,
+  # not worth a stateful workaround for a catch-up sync.
+  schedule:
+    - cron: "0 6 */2 * *"
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -e .
+
+      - name: Run seed sync
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          DATABASE_URL_RW: ${{ secrets.DATABASE_URL_RW }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          EMBEDDING_PROVIDER: ${{ vars.EMBEDDING_PROVIDER }}
+          LLM_MODEL: ${{ vars.LLM_MODEL }}
+        run: python -m scripts.sync_github
