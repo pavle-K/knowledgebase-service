@@ -11,7 +11,7 @@ from src.ingestion.embedder import FakeEmbedder
 from src.ingestion.github_client import RepoInfo
 from src.main import app
 from src.query.synthesizer import FakeLLMClient
-from tests.integration.conftest import db_conn, migrated_db  # noqa: F401
+from tests.integration.conftest import MigratedDb, db_conn, migrated_db  # noqa: F401
 
 API_AUTH_KEY = "test-auth-key"
 
@@ -91,6 +91,15 @@ def test_query_succeeds_and_matches_documented_schema(client: TestClient) -> Non
     assert isinstance(body["execution_time_ms"], int)
 
 
+def test_query_over_max_length_is_rejected(client: TestClient) -> None:
+    response = client.post(
+        "/v1/query",
+        json={"query": "x" * 2001},
+        headers={"Authorization": f"Bearer {API_AUTH_KEY}"},
+    )
+    assert response.status_code == 422
+
+
 def test_query_respects_layers_filter(client: TestClient) -> None:
     response = client.post(
         "/v1/query",
@@ -127,3 +136,67 @@ def test_impact_unknown_project(client: TestClient) -> None:
     )
     assert response.status_code == 200
     assert response.json()["project_found"] is False
+
+
+# --- Private-project visibility, end to end over the real roles ---
+
+API_ADMIN_KEY = "test-admin-key"
+
+
+@pytest.fixture
+def tiered_client(
+    migrated_db: MigratedDb,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[tuple[TestClient, str]]:
+    """No get_conn override: the request's tier picks a real database role."""
+    monkeypatch.setenv("API_ADMIN_KEY", API_ADMIN_KEY)
+    monkeypatch.setenv("DATABASE_URL_RO", migrated_db.app_ro_url)
+    monkeypatch.setenv("DATABASE_URL_RO_PUBLIC", migrated_db.app_ro_public_url)
+
+    unique = uuid.uuid4().hex[:8]
+    name = f"private-repo-{unique}"
+    with psycopg.connect(migrated_db.admin_url) as conn:
+        conn.execute(
+            """
+            insert into projects (name, repo_url, source, default_branch, is_private)
+            values (%s, %s, 'github', 'main', true)
+            """,
+            (name, f"https://github.com/pavle-K/{name}"),
+        )
+        conn.commit()
+
+    app.dependency_overrides[get_embedder_dep] = lambda: FakeEmbedder()
+    app.dependency_overrides[get_llm_dep] = lambda: FakeLLMClient(response="test summary")
+    try:
+        yield TestClient(app), name
+    finally:
+        app.dependency_overrides.clear()
+        with psycopg.connect(migrated_db.admin_url) as conn:
+            conn.execute("delete from projects where name = %s", (name,))
+            conn.commit()
+
+
+def test_public_key_cannot_see_a_private_project(
+    tiered_client: tuple[TestClient, str],
+) -> None:
+    client, private_name = tiered_client
+    response = client.post(
+        "/v1/impact",
+        json={"project": private_name, "interface": "GET /x"},
+        headers={"Authorization": f"Bearer {API_AUTH_KEY}"},
+    )
+    assert response.status_code == 200
+    assert response.json()["project_found"] is False
+
+
+def test_admin_key_can_see_a_private_project(
+    tiered_client: tuple[TestClient, str],
+) -> None:
+    client, private_name = tiered_client
+    response = client.post(
+        "/v1/impact",
+        json={"project": private_name, "interface": "GET /x"},
+        headers={"Authorization": f"Bearer {API_ADMIN_KEY}"},
+    )
+    assert response.status_code == 200
+    assert response.json()["project_found"] is True

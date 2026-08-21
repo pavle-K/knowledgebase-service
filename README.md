@@ -14,6 +14,8 @@ Domain-specific agents live in their own repositories and call this service over
 - [Architecture](#architecture)
 - [Data model](#data-model)
 - [Query engine](#query-engine)
+- [Access tiers](#access-tiers)
+- [Cost controls](#cost-controls)
 - [API](#api)
 - [MCP](#mcp)
 - [Setup](#setup)
@@ -48,7 +50,9 @@ GITHUB (repos, code, commits, READMEs)     /docs (manual: resume, notes, ADRs)
         (other agents, badges, bots)   (Claude Desktop/Code, Cursor)
 ```
 
-Ingestion writes through a role with write grants (`app_rw`); every query-path read — REST, MCP, and the LangGraph engine — goes through a separate role (`app_ro`) that only has `SELECT` privileges, enforced at the database level. The natural-language query path never writes, and that boundary is not just an application-level check: the role itself has no write grants, so a sufficiently creative generated query still can't mutate anything.
+Ingestion writes through a role with write grants (`app_rw`); every query-path read — REST, MCP, and the LangGraph engine — goes through a role with only `SELECT` privileges, enforced at the database level. The natural-language query path never writes, and that boundary is not just an application-level check: the role itself has no write grants, so a sufficiently creative generated query still can't mutate anything.
+
+The same reasoning governs private repositories. Private repos are ingested in full, but reads are split across two roles: `app_ro` sees the whole corpus, while `app_ro_public` is constrained by row-level security to projects with `is_private = false`. Because the SQL node executes LLM-generated statements, a `WHERE` clause in application code would be the wrong place to enforce this — the policy lives on the tables, so it holds regardless of what SQL is generated. See [Access tiers](#access-tiers).
 
 ## Data model
 
@@ -128,13 +132,38 @@ router --(intent)--> sql | vector | time | graph_traversal
   Cycles terminate on the depth bound rather than a visited-set; the traversal is deliberately bounded, not exhaustive.
 - **Synthesizer** — merges results into a plain-English summary plus `confidence` and an optional `coverage_note`. Graph synthesis is template-based rather than LLM-paraphrased, so the confidence caveats above can't be softened or dropped by a language model.
 
+## Access tiers
+
+Two bearer tokens, mapped to two database roles:
+
+| Token | Database role | Sees |
+|---|---|---|
+| `API_AUTH_KEY` | `app_ro_public` | Public projects only |
+| `API_ADMIN_KEY` | `app_ro` | Every project, including private repos |
+
+The auth middleware resolves the token to a tier and `get_conn` opens the corresponding connection; the filtering itself is row-level security on the tables, not a query-code predicate. A request presenting no recognized token is rejected, and a request whose tier is somehow unset falls back to the public role rather than the privileged one.
+
+`app_ro_public` additionally cannot read `secret_scan_findings` or `ingestion_log` at all — both name file paths and repositories that may be private.
+
+Distribute `API_AUTH_KEY` to consumers that should only see public work. Keep `API_ADMIN_KEY` for your own tooling.
+
+## Cost controls
+
+`/v1/query` costs one embedding call plus up to four LLM calls (three self-heal SQL attempts, one synthesis) — a request-shaped cost surface, not a flat one. Three layers bound it:
+
+- **`query` has a hard length cap** — rejected with `422` before it reaches an embedding or LLM call. Configurable via the `MAX_QUERY_LENGTH` env var (default 2000 characters); in the deployed Lambda that's set from the `MAX_QUERY_LENGTH` GitHub Actions variable.
+- **API Gateway throttles the whole API** — a global circuit breaker against a request flood, not a per-key quota. Both keys share it. Configurable via the `API_THROTTLE_RATE_LIMIT`/`API_THROTTLE_BURST_LIMIT` GitHub Actions variables (defaults: 20 req/s steady-state, burst of 40); falls back to those defaults if either is unset.
+- **Set a hard monthly spend cap in the Anthropic Console and OpenAI's billing settings.** This is the one control that still holds if the two above are ever bypassed or misconfigured — it isn't part of this codebase, set it directly with the provider.
+
+Neither of the first two distinguishes `API_AUTH_KEY` from `API_ADMIN_KEY`, or one consumer from another — that requires per-key quotas and revocation, which this project doesn't yet have.
+
 ## API
 
-All endpoints except `/healthz` and `/webhook/github` require `Authorization: Bearer <API_AUTH_KEY>`.
+All endpoints except `/healthz` and `/webhook/github` require a bearer token — see [Access tiers](#access-tiers).
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/v1/query` | `{ "query": str, "layers": [str]? }` → runs the full LangGraph engine. Returns `{ summary, intent, data, confidence, coverage_note, execution_time_ms }`. |
+| `POST` | `/v1/query` | `{ "query": str, "layers": [str]? }` → runs the full LangGraph engine. `query` length is capped — see [Cost controls](#cost-controls). Returns `{ summary, intent, data, confidence, coverage_note, execution_time_ms }`. |
 | `POST` | `/v1/impact` | `{ "project": str, "interface": str }` → deterministic graph traversal only, bypassing intent classification. For callers that already know they want an impact answer. |
 | `POST` | `/webhook/github` | GitHub webhook receiver. HMAC-verified via `X-Hub-Signature-256`. Handles `push`, `repository`, `release`, `ping`. |
 | `GET` | `/healthz` | Liveness check, unauthenticated. |
@@ -178,19 +207,23 @@ Fill in `.env`:
 |---|---|
 | `DATABASE_URL_ADMIN` | Owner connection, used only by the migration runner |
 | `DATABASE_URL_RW` | App connection for ingestion (`app_rw` role) |
-| `DATABASE_URL_RO` | App connection for the query path (`app_ro` role, `SELECT`-only) |
+| `DATABASE_URL_RO` | Privileged query-path connection (`app_ro`, `SELECT`-only, sees private projects) |
+| `DATABASE_URL_RO_PUBLIC` | Default query-path connection (`app_ro_public`, public projects only) |
 | `TEST_DATABASE_URL` | A **disposable** local Postgres used by integration tests — its schema is dropped and rebuilt on every test run. Never point this at a real database. |
 | `GITHUB_TOKEN` | GitHub PAT with repo read scope, used by the sync script |
 | `EMBEDDING_PROVIDER`, `OPENAI_API_KEY` | Embedding provider, pluggable via the env var |
 | `ANTHROPIC_API_KEY`, `LLM_MODEL` | LLM used for SQL generation and answer synthesis |
-| `API_AUTH_KEY` | Bearer token required on the REST/MCP surface |
+| `API_AUTH_KEY` | Bearer token for public-tier access |
+| `API_ADMIN_KEY` | Bearer token for privileged access to private projects |
 | `GITHUB_WEBHOOK_SECRET` | Shared secret for verifying webhook signatures |
+
+The passwords embedded in `DATABASE_URL_RW`, `DATABASE_URL_RO`, and `DATABASE_URL_RO_PUBLIC` are what the migrations set on those roles — change the URL and re-run `make migrate` to rotate.
 
 ### Bring up the database and apply migrations
 
 ```bash
 make db-up      # starts a local pgvector/pgvector:pg16 container
-make migrate     # applies migrations/, creating the app_rw / app_ro roles and grants
+make migrate     # applies migrations/, creating the three roles, grants, and RLS policies
 ```
 
 Migrations run the same way against a real managed Postgres instance — point `DATABASE_URL_ADMIN`/`_RW`/`_RO` at it and run `make migrate`.
@@ -236,7 +269,7 @@ make test-unit     # unit tests only, no database required
 make lint          # ruff check, ruff format --check, mypy
 ```
 
-Integration tests run against a real Postgres (`TEST_DATABASE_URL`), not a mock or SQLite — pgvector behavior and the `app_ro` role's write rejection are both verified against real grants, not application-level string checks. Nothing in the test suite calls a real LLM or embedding provider or the real GitHub API: `FakeEmbedder` returns deterministic hash-seeded vectors, `FakeLLMClient` returns canned responses, and GitHub responses are mocked from committed fixture payloads.
+Integration tests run against a real Postgres (`TEST_DATABASE_URL`), not a mock or SQLite — pgvector behavior, the read-only roles' write rejection, and the row-level security that hides private projects are all verified against real grants and policies, not application-level string checks. Nothing in the test suite calls a real LLM or embedding provider or the real GitHub API: `FakeEmbedder` returns deterministic hash-seeded vectors, `FakeLLMClient` returns canned responses, and GitHub responses are mocked from committed fixture payloads.
 
 CI (`.github/workflows/test.yml`) runs on every push and PR against a matrix of Python 3.11/3.12, with a real Postgres service container, followed by a smoke test that the app actually serves `/healthz`.
 

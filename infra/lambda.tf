@@ -41,15 +41,18 @@ resource "aws_lambda_function" "app" {
 
   environment {
     variables = {
-      DATABASE_URL_RW       = var.database_url_rw
-      DATABASE_URL_RO       = var.database_url_ro
-      ANTHROPIC_API_KEY     = var.anthropic_api_key
-      OPENAI_API_KEY        = var.openai_api_key
-      API_AUTH_KEY          = var.api_auth_key
-      GITHUB_TOKEN          = var.github_token
-      GITHUB_WEBHOOK_SECRET = var.github_webhook_secret
-      EMBEDDING_PROVIDER    = var.embedding_provider
-      LLM_MODEL             = var.llm_model
+      DATABASE_URL_RW        = var.database_url_rw
+      DATABASE_URL_RO        = var.database_url_ro
+      DATABASE_URL_RO_PUBLIC = var.database_url_ro_public
+      ANTHROPIC_API_KEY      = var.anthropic_api_key
+      OPENAI_API_KEY         = var.openai_api_key
+      API_AUTH_KEY           = var.api_auth_key
+      API_ADMIN_KEY          = var.api_admin_key
+      GITHUB_TOKEN           = var.github_token
+      GITHUB_WEBHOOK_SECRET  = var.github_webhook_secret
+      EMBEDDING_PROVIDER     = var.embedding_provider
+      LLM_MODEL              = var.llm_model
+      MAX_QUERY_LENGTH       = var.max_query_length
     }
   }
 }

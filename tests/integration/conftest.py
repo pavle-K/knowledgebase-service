@@ -27,6 +27,7 @@ class MigratedDb:
     admin_url: str
     app_rw_url: str
     app_ro_url: str
+    app_ro_public_url: str
 
 
 @pytest.fixture(scope="session")
@@ -37,6 +38,7 @@ def migrated_db() -> Iterator[MigratedDb]:
 
     rw_password = os.environ.get("APP_RW_PASSWORD", "test_rw_password")
     ro_password = os.environ.get("APP_RO_PASSWORD", "test_ro_password")
+    ro_public_password = os.environ.get("APP_RO_PUBLIC_PASSWORD", "test_ro_public_password")
 
     try:
         conn = psycopg.connect(admin_url)
@@ -51,17 +53,23 @@ def migrated_db() -> Iterator[MigratedDb]:
             conn.execute("create schema public")
             conn.execute("drop role if exists app_rw")
             conn.execute("drop role if exists app_ro")
+            conn.execute("drop role if exists app_ro_public")
 
         apply_pending(
             conn,
             MIGRATIONS_DIR,
-            {"APP_RW_PASSWORD": rw_password, "APP_RO_PASSWORD": ro_password},
+            {
+                "APP_RW_PASSWORD": rw_password,
+                "APP_RO_PASSWORD": ro_password,
+                "APP_RO_PUBLIC_PASSWORD": ro_public_password,
+            },
         )
 
     yield MigratedDb(
         admin_url=admin_url,
         app_rw_url=_role_url(admin_url, "app_rw", rw_password),
         app_ro_url=_role_url(admin_url, "app_ro", ro_password),
+        app_ro_public_url=_role_url(admin_url, "app_ro_public", ro_public_password),
     )
     conn.close()
 
