@@ -1,0 +1,71 @@
+name: terraform-plan
+
+on:
+  pull_request:
+    paths:
+      - "infra/**"
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  TF_VAR_image_tag: ${{ github.event.pull_request.head.sha }}
+  TF_VAR_github_token: ${{ secrets.GH_TOKEN }}
+  TF_VAR_github_webhook_secret: ${{ secrets.GH_WEBHOOK_SECRET }}
+  TF_VAR_database_url_rw: ${{ secrets.DATABASE_URL_RW }}
+  TF_VAR_database_url_ro: ${{ secrets.DATABASE_URL_RO }}
+  TF_VAR_anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+  TF_VAR_openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+  TF_VAR_api_auth_key: ${{ secrets.API_AUTH_KEY }}
+  TF_VAR_embedding_provider: ${{ vars.EMBEDDING_PROVIDER }}
+  TF_VAR_llm_model: ${{ vars.LLM_MODEL }}
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Restore Terraform state
+        uses: actions/cache@v4
+        with:
+          path: infra/terraform.tfstate
+          key: tfstate-${{ env.AWS_REGION }}
+
+      - name: Terraform init
+        working-directory: infra
+        run: terraform init
+
+      - name: Terraform plan
+        id: plan
+        working-directory: infra
+        run: terraform plan -no-color -input=false | tee plan_output.txt
+        continue-on-error: true
+
+      - name: Post plan as PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('infra/plan_output.txt', 'utf8');
+            const truncated = plan.length > 60000 ? plan.slice(-60000) : plan;
+            const body = `#### Terraform Plan\n<details><summary>Show plan</summary>\n\n\`\`\`\n${truncated}\n\`\`\`\n\n</details>`;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });
+
+      - name: Fail if plan failed
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
