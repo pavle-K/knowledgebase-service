@@ -30,9 +30,11 @@ def main() -> int:
     admin_url = os.environ.get("DATABASE_URL_ADMIN")
     rw_url = os.environ.get("DATABASE_URL_RW")
     ro_url = os.environ.get("DATABASE_URL_RO")
-    if not admin_url or not rw_url or not ro_url:
+    ro_public_url = os.environ.get("DATABASE_URL_RO_PUBLIC")
+    if not admin_url or not rw_url or not ro_url or not ro_public_url:
         print(
-            "DATABASE_URL_ADMIN, DATABASE_URL_RW, and DATABASE_URL_RO must all be set",
+            "DATABASE_URL_ADMIN, DATABASE_URL_RW, DATABASE_URL_RO, and "
+            "DATABASE_URL_RO_PUBLIC must all be set",
             file=sys.stderr,
         )
         return 1
@@ -40,6 +42,7 @@ def main() -> int:
     env = {
         "APP_RW_PASSWORD": _password_from_url(rw_url, "DATABASE_URL_RW"),
         "APP_RO_PASSWORD": _password_from_url(ro_url, "DATABASE_URL_RO"),
+        "APP_RO_PUBLIC_PASSWORD": _password_from_url(ro_public_url, "DATABASE_URL_RO_PUBLIC"),
     }
 
     with psycopg.connect(admin_url) as conn:

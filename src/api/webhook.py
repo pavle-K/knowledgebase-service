@@ -40,7 +40,9 @@ def _repo_from_payload(repo_payload: dict[str, Any]) -> RepoInfo:
         html_url=repo_payload["html_url"],
         description=repo_payload.get("description"),
         default_branch=repo_payload.get("default_branch", "main"),
-        is_private=repo_payload.get("private", False),
+        # Fail closed: if GitHub ever omits this field, treat the repo as
+        # private rather than silently exposing it to the public-tier role.
+        is_private=repo_payload.get("private", True),
         fork=repo_payload.get("fork", False),
     )
 

@@ -245,10 +245,36 @@ def test_repository_event_upserts_project(client: TestClient, db_conn: psycopg.C
     assert response.json() == {"status": "ok", "event": "repository"}
 
     row = db_conn.execute(
-        "select description from projects where repo_url = %s",
-        (f"https://github.com/{full_name}",),
+        "select description from projects where repo_url = %s", (f"https://github.com/{full_name}",)
     ).fetchone()
     assert row == ("updated description",)
+
+
+def test_repository_event_defaults_to_private_when_field_is_missing(
+    client: TestClient,
+    db_conn: psycopg.Connection,  # noqa: F811
+) -> None:
+    unique = uuid.uuid4().hex[:8]
+    full_name = f"pavle-K/no-private-field-{unique}"
+    payload = {
+        "action": "edited",
+        "repository": {
+            "name": f"no-private-field-{unique}",
+            "full_name": full_name,
+            "html_url": f"https://github.com/{full_name}",
+            "description": None,
+            "default_branch": "main",
+            "fork": False,
+        },
+    }
+    response = _post_webhook(client, "repository", payload)
+    assert response.status_code == 200
+
+    row = db_conn.execute(
+        "select is_private from projects where repo_url = %s",
+        (f"https://github.com/{full_name}",),
+    ).fetchone()
+    assert row == (True,)
 
 
 def test_release_event_is_acknowledged(client: TestClient) -> None:
