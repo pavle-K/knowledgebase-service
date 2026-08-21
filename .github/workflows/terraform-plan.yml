@@ -33,6 +33,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           repos=$(gh repo list --limit 200 --json name,isFork --jq '[.[] | select(.isFork == false) | .name]')
+          count=$(echo "$repos" | jq 'length')
+          # Terraform destroys the webhook for any repo missing from this list - a
+          # short/empty result (rate limit, transient API error) must not reach
+          # apply, or it silently deletes webhooks on every other repo.
+          if [ "$count" -lt 5 ]; then
+            echo "gh repo list returned only $count non-fork repos ($repos) - refusing to continue, this would destroy webhooks on the rest" >&2
+            exit 1
+          fi
           echo "repos=$repos" >> "$GITHUB_OUTPUT"
 
       - name: Configure AWS credentials
