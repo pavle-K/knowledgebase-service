@@ -1,11 +1,8 @@
 name: sync
 
 on:
-  # */2 on day-of-month resets at the start of each month, so the gap between
-  # runs is occasionally 1 day instead of 2 across a month boundary - accepted,
-  # not worth a stateful workaround for a catch-up sync.
   schedule:
-    - cron: "0 6 */2 * *"
+    - cron: "0 6,18 * * *"
   workflow_dispatch:
 
 jobs:
