@@ -20,3 +20,10 @@ def test_generate_sql_includes_previous_error_in_prompt() -> None:
         "list projects", "projects: name (text)", llm, previous_error="column x does not exist"
     )
     assert "column x does not exist" in (llm.last_user or "")
+
+
+def test_generate_sql_system_prompt_points_tech_stack_questions_at_dependencies() -> None:
+    llm = FakeLLMClient(response="select name from projects")
+    generate_sql("which projects use boto3", "projects: name (text)", llm)
+    assert "dependencies" in (llm.last_system or "")
+    assert "external_name" in (llm.last_system or "")
