@@ -91,6 +91,15 @@ def test_query_succeeds_and_matches_documented_schema(client: TestClient) -> Non
     assert isinstance(body["execution_time_ms"], int)
 
 
+def test_query_over_max_length_is_rejected(client: TestClient) -> None:
+    response = client.post(
+        "/v1/query",
+        json={"query": "x" * 2001},
+        headers={"Authorization": f"Bearer {API_AUTH_KEY}"},
+    )
+    assert response.status_code == 422
+
+
 def test_query_respects_layers_filter(client: TestClient) -> None:
     response = client.post(
         "/v1/query",

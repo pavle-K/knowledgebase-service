@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+# Bounds embedding + LLM cost per request - a natural-language question has no
+# legitimate reason to be longer than this.
+MAX_QUERY_LENGTH = 2000
 
 
 class QueryRequest(BaseModel):
-    query: str
+    query: str = Field(max_length=MAX_QUERY_LENGTH)
     layers: list[str] | None = None
 
 

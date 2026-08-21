@@ -77,3 +77,17 @@ variable "llm_model" {
   type    = string
   default = "claude-haiku-4-5-20251001"
 }
+
+# API Gateway throttle: global circuit breaker, not a per-key quota. Not wired
+# through CI as a TF_VAR - an unset GitHub Actions variable becomes an empty
+# string, which fails to parse as a number and would break every deploy. Edit
+# the defaults below directly, or pass -var manually for a one-off change.
+variable "api_throttle_rate_limit" {
+  type    = number
+  default = 20
+}
+
+variable "api_throttle_burst_limit" {
+  type    = number
+  default = 40
+}
