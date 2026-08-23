@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 
-Intent = str  # 'graph' | 'sql' | 'hybrid' | 'vector' | 'time'
+Intent = str  # 'graph' | 'sql' | 'hybrid' | 'vector' | 'time' | 'latest'
 
 _GRAPH_PATTERNS = [
     r"\bwhat(?:'s| is| would| will)? break",
@@ -30,6 +30,16 @@ _AGGREGATE_OVERRIDE_PATTERNS = [
     r"\bother projects? of mine\b",
     r"\beach other\b",
     r"\bone another\b",
+]
+
+# "latest/newest" asks for the single most recent thing, ranked by date - a plain
+# similarity search (even time-windowed) can't answer that, since it ranks by how
+# well content matches the query text, not by how recent it is. Checked ahead of
+# _TIME_PATTERNS: "most recent" would otherwise also match "recent(?:ly)?" below.
+_LATEST_PATTERNS = [
+    r"\blatest\b",
+    r"\bnewest\b",
+    r"\bmost recent\b",
 ]
 
 _TIME_PATTERNS = [
@@ -60,6 +70,9 @@ def classify_intent(query: str) -> Intent:
     is_aggregate_override = any(re.search(p, q) for p in _AGGREGATE_OVERRIDE_PATTERNS)
     if is_graph_signal and not is_aggregate_override:
         return "graph"
+
+    if any(re.search(p, q) for p in _LATEST_PATTERNS):
+        return "latest"
 
     if any(re.search(p, q) for p in _TIME_PATTERNS):
         return "time"

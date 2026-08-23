@@ -122,5 +122,6 @@ def build_synthesis(state: QueryState, llm: LLMClient) -> tuple[str, str, str | 
         return _synthesize_sql(state, llm)
     if intent == "hybrid":
         return _synthesize_hybrid(state, llm)
-    # 'vector' and 'time' both synthesize from vector_results (time just pre-filtered it)
+    # 'vector', 'time', and 'latest' all synthesize from vector_results - 'time' and
+    # 'latest' just populate it differently (date-windowed vs. plain date-sorted).
     return _synthesize_vector(state, llm)
