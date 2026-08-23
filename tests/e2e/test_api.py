@@ -200,3 +200,97 @@ def test_admin_key_can_see_a_private_project(
     )
     assert response.status_code == 200
     assert response.json()["project_found"] is True
+
+
+# --- Scoped lookup endpoints (dependencies/projects/search) ---
+
+_SCOPED_ENDPOINTS = [
+    ("/v1/dependencies", {"project": "x"}),
+    ("/v1/projects", {}),
+    ("/v1/projects/info", {"project": "x"}),
+    ("/v1/search/docs", {"query": "x"}),
+    ("/v1/search/code", {"query": "x"}),
+    ("/v1/search/commits", {"query": "x"}),
+    ("/v1/commits/recent", {}),
+]
+
+
+@pytest.mark.parametrize("path,body", _SCOPED_ENDPOINTS)
+def test_scoped_endpoint_rejected_without_auth(client: TestClient, path: str, body: dict) -> None:
+    response = client.post(path, json=body)
+    assert response.status_code == 401
+
+
+def test_get_dependencies_unknown_project(client: TestClient) -> None:
+    response = client.post(
+        "/v1/dependencies",
+        json={"project": "does-not-exist"},
+        headers={"Authorization": f"Bearer {API_AUTH_KEY}"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"project_found": False, "dependencies": []}
+
+
+def test_list_projects_returns_seeded_project(
+    client: TestClient,
+    db_conn: psycopg.Connection,  # noqa: F811
+) -> None:
+    repo = _fake_repo()
+    upsert_project(db_conn, repo)
+
+    response = client.post(
+        "/v1/projects", json={}, headers={"Authorization": f"Bearer {API_AUTH_KEY}"}
+    )
+    assert response.status_code == 200
+    names = {p["name"] for p in response.json()}
+    assert repo.name in names
+
+
+def test_get_project_info_unknown_project(client: TestClient) -> None:
+    response = client.post(
+        "/v1/projects/info",
+        json={"project": "does-not-exist"},
+        headers={"Authorization": f"Bearer {API_AUTH_KEY}"},
+    )
+    assert response.status_code == 200
+    assert response.json()["found"] is False
+
+
+def test_search_docs_succeeds(client: TestClient) -> None:
+    response = client.post(
+        "/v1/search/docs",
+        json={"query": "what does this do"},
+        headers={"Authorization": f"Bearer {API_AUTH_KEY}"},
+    )
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_search_code_succeeds(client: TestClient) -> None:
+    response = client.post(
+        "/v1/search/code",
+        json={"query": "rate limiting"},
+        headers={"Authorization": f"Bearer {API_AUTH_KEY}"},
+    )
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_search_commits_succeeds(client: TestClient) -> None:
+    response = client.post(
+        "/v1/search/commits",
+        json={"query": "auth changes"},
+        headers={"Authorization": f"Bearer {API_AUTH_KEY}"},
+    )
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_get_recent_commits_succeeds(client: TestClient) -> None:
+    response = client.post(
+        "/v1/commits/recent",
+        json={},
+        headers={"Authorization": f"Bearer {API_AUTH_KEY}"},
+    )
+    assert response.status_code == 200
+    assert response.json() == []
