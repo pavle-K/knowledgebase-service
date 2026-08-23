@@ -221,6 +221,17 @@ def test_scoped_endpoint_rejected_without_auth(client: TestClient, path: str, bo
     assert response.status_code == 401
 
 
+# MCP tool calls with no arguments arrive as a POST with no body at all (not even
+# `{}`) - distinct from test_list_projects_returns_seeded_project below, which sends
+# an explicit empty JSON object. Both must work.
+@pytest.mark.parametrize("path", ["/v1/projects", "/v1/commits/recent"])
+def test_all_optional_body_endpoint_accepts_a_request_with_no_body(
+    client: TestClient, path: str
+) -> None:
+    response = client.post(path, headers={"Authorization": f"Bearer {API_AUTH_KEY}"})
+    assert response.status_code == 200
+
+
 def test_get_dependencies_unknown_project(client: TestClient) -> None:
     response = client.post(
         "/v1/dependencies",

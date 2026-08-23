@@ -51,6 +51,12 @@ ConnDep = Annotated[psycopg.Connection, Depends(get_conn)]
 EmbedderDep = Annotated[Embedder, Depends(get_embedder_dep)]
 LLMDep = Annotated[LLMClient, Depends(get_llm_dep)]
 
+# MCP tool calls with zero arguments arrive as a request with no HTTP body at all -
+# these defaults let an all-optional body still bind instead of a 422. Module-level
+# singletons (not a call in the signature) since both are read-only.
+_EMPTY_PROJECTS_REQUEST = ProjectsRequest()
+_EMPTY_RECENT_COMMITS_REQUEST = RecentCommitsRequest()
+
 
 @router.post("/v1/query", response_model=QueryResponse, operation_id="query")
 def query_endpoint(
@@ -112,7 +118,9 @@ def get_dependencies_endpoint(body: DependenciesRequest, conn: ConnDep) -> Depen
 @router.post(
     "/v1/projects", response_model=list[ProjectSummaryResponse], operation_id="list_projects"
 )
-def list_projects_endpoint(body: ProjectsRequest, conn: ConnDep) -> list[ProjectSummaryResponse]:
+def list_projects_endpoint(
+    conn: ConnDep, body: ProjectsRequest = _EMPTY_PROJECTS_REQUEST
+) -> list[ProjectSummaryResponse]:
     """List projects, optionally filtered by technology (e.g. 'postgres', 'fastapi')."""
     projects = list_projects(conn, technology=body.technology)
     return [
@@ -188,7 +196,7 @@ def search_commits_endpoint(
     operation_id="get_recent_commits",
 )
 def get_recent_commits_endpoint(
-    body: RecentCommitsRequest, conn: ConnDep
+    conn: ConnDep, body: RecentCommitsRequest = _EMPTY_RECENT_COMMITS_REQUEST
 ) -> list[SearchResultResponse]:
     """Most recent commits by date, not relevance - no query text, no embedding call."""
     results = search_latest_commits(conn, limit=body.limit, project=body.project)
