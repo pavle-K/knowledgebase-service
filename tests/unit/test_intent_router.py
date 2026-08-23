@@ -35,6 +35,12 @@ CASES = [
     ("what happened today", "time"),
     ("what did I do yesterday", "time"),
     ("show me recent activity", "time"),
+    # --- latest: "most recent thing", ranked by date, not by relevance to any
+    #     topic (must not fall through to plain vector, and must not be swallowed
+    #     by _TIME_PATTERNS' "recent(?:ly)?" via "most recent") ---
+    ("what was the latest update in this user's repositories", "latest"),
+    ("what's the newest commit", "latest"),
+    ("show me the most recent change", "latest"),
     # --- sql: aggregate "depend on" phrasings that share vocabulary with graph
     #     but name no specific target, so graph extraction could never resolve one ---
     ("which of my projects depend on other projects of mine", "sql"),

@@ -28,7 +28,7 @@ from src.query.sql_exec import SqlResult, run_sql_with_self_heal
 from src.query.sql_generator import introspect_schema
 from src.query.synthesizer import LLMClient
 from src.query.time_range import parse_time_range
-from src.query.vector_search import SearchResult, search_all, search_commits
+from src.query.vector_search import SearchResult, search_all, search_commits, search_latest_commits
 
 
 class QueryState(TypedDict):
@@ -62,6 +62,9 @@ def build_query_engine(
         results = search_commits(conn, state["query"], embedder, limit=10, since=since, until=until)
         return {"vector_results": results}
 
+    def latest_node(state: QueryState) -> dict[str, list[SearchResult]]:
+        return {"vector_results": search_latest_commits(conn, limit=5)}
+
     def graph_node(state: QueryState) -> dict[str, ImpactResult | None]:
         params = extract_impact_params(state["query"], llm)
         if params is None:
@@ -78,6 +81,7 @@ def build_query_engine(
     graph.add_node("sql", sql_node)
     graph.add_node("vector", vector_node)
     graph.add_node("time", time_node)
+    graph.add_node("latest", latest_node)
     graph.add_node("graph_traversal", graph_node)
     graph.add_node("synthesize", synthesize_node)
 
@@ -94,6 +98,7 @@ def build_query_engine(
             "hybrid": "sql",
             "vector": "vector",
             "time": "time",
+            "latest": "latest",
             "graph": "graph_traversal",
         },
     )
@@ -106,6 +111,7 @@ def build_query_engine(
     )
     graph.add_edge("vector", "synthesize")
     graph.add_edge("time", "synthesize")
+    graph.add_edge("latest", "synthesize")
     graph.add_edge("graph_traversal", "synthesize")
     graph.add_edge("synthesize", END)
     return graph.compile()

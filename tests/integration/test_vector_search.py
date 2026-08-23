@@ -9,7 +9,13 @@ from src.ingestion.documents import upsert_project
 from src.ingestion.embedder import FakeEmbedder, format_vector
 from src.ingestion.github_client import CommitDetail, CommitFile, CommitInfo, RepoInfo
 from src.query.synthesizer import FakeLLMClient
-from src.query.vector_search import search_all, search_code_chunks, search_commits, search_documents
+from src.query.vector_search import (
+    search_all,
+    search_code_chunks,
+    search_commits,
+    search_documents,
+    search_latest_commits,
+)
 from tests.integration.conftest import MigratedDb
 
 
@@ -190,3 +196,29 @@ def test_search_commits_time_filter(db_conn: psycopg.Connection, migrated_db: Mi
     shas = {r.source_path for r in results}
     assert "new222" in shas
     assert "old111" not in shas
+
+
+def test_search_latest_commits_orders_by_date_not_similarity(db_conn: psycopg.Connection) -> None:
+    project_id = upsert_project(db_conn, _fake_repo())
+    embedder = FakeEmbedder()
+    detail = CommitDetail(
+        files=[
+            CommitFile(filename="src/f.py", additions=1, deletions=0, patch="@@ -1 +1,2 @@\n+x\n")
+        ],
+        additions=1,
+        deletions=0,
+    )
+
+    old_info = CommitInfo(
+        sha="old111", message="Old change", author="pavle-K", committed_at="2020-01-01T00:00:00Z"
+    )
+    new_info = CommitInfo(
+        sha="new222", message="New change", author="pavle-K", committed_at="2026-01-01T00:00:00Z"
+    )
+    sync_commit(db_conn, project_id, old_info, detail, embedder, FakeLLMClient())
+    sync_commit(db_conn, project_id, new_info, detail, embedder, FakeLLMClient())
+
+    results = search_latest_commits(db_conn, limit=10)
+
+    shas = [r.source_path for r in results]
+    assert shas.index("new222") < shas.index("old111")

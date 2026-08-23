@@ -225,3 +225,45 @@ def test_time_intent_only_returns_commits_within_range(db_conn: psycopg.Connecti
     assert "recent1" in shas
     assert "old1" not in shas
     assert llm.call_count == 1  # only synthesis - time parsing is deterministic, no LLM call
+
+
+def test_latest_intent_returns_newest_commit_first_not_by_similarity(
+    db_conn: psycopg.Connection,
+) -> None:
+    project = _fake_repo("latest-proj")
+    project_id = upsert_project(db_conn, project)
+    embedder = FakeEmbedder()
+    detail = CommitDetail(
+        files=[
+            CommitFile(filename="src/f.py", additions=1, deletions=0, patch="@@ -1 +1,2 @@\n+x\n")
+        ],
+        additions=1,
+        deletions=0,
+    )
+
+    now = dt.datetime.now(dt.UTC)
+    # "zzz unrelated wording" would rank last on pure text similarity to the query
+    # below - it must still come first here, because it's the newest by date.
+    newest = CommitInfo(
+        sha="newest1",
+        message="zzz unrelated wording",
+        author="pavle-K",
+        committed_at=now.isoformat(),
+    )
+    older = CommitInfo(
+        sha="older1",
+        message="Latest update work",
+        author="pavle-K",
+        committed_at=(now - dt.timedelta(days=30)).isoformat(),
+    )
+    sync_commit(db_conn, project_id, newest, detail, embedder, FakeLLMClient())
+    sync_commit(db_conn, project_id, older, detail, embedder, FakeLLMClient())
+
+    embed_calls_before = embedder.call_count
+    llm = FakeLLMClient(response="The latest update was newest1.")
+    state = run_query_engine(db_conn, embedder, llm, "what was the latest update")
+
+    assert state["intent"] == "latest"
+    assert state["vector_results"][0].source_path == "newest1"
+    assert llm.call_count == 1  # only synthesis
+    assert embedder.call_count == embed_calls_before  # no embedding call - pure date sort

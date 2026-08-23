@@ -115,6 +115,34 @@ def search_commits(
     ]
 
 
+def search_latest_commits(conn: psycopg.Connection, limit: int = 5) -> list[SearchResult]:
+    """Most recent commits by date, not similarity - for 'what's the latest/newest'
+    questions, where there's no topic to embed and rank against, just a date sort.
+    """
+    rows = conn.execute(
+        """
+        select p.name, co.sha, coalesce(co.diff_summary, co.message) as content, co.committed_at
+        from commits co
+        join projects p on p.id = co.project_id
+        where co.committed_at is not null
+        order by co.committed_at desc
+        limit %s
+        """,
+        (limit,),
+    ).fetchall()
+    return [
+        SearchResult(
+            project_name=row[0],
+            source_path=row[1],
+            content=row[2],
+            distance=0.0,
+            layer="commit",
+            committed_at=row[3],
+        )
+        for row in rows
+    ]
+
+
 _LAYER_ALIASES = {
     "documents": "document",
     "document": "document",
