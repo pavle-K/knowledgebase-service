@@ -53,6 +53,40 @@ resource "aws_lambda_function" "app" {
       EMBEDDING_PROVIDER     = var.embedding_provider
       LLM_MODEL              = var.llm_model
       MAX_QUERY_LENGTH       = var.max_query_length
+      WEBHOOK_QUEUE_URL      = aws_sqs_queue.webhook_events.url
     }
   }
+}
+
+# Consumes src.api.webhook's enqueued events off SQS (infra/sqs.tf) - no API
+# Gateway in front of it, so it isn't bound by the 30s integration timeout
+# that made synchronous webhook ingestion time out and lose data.
+resource "aws_lambda_function" "worker" {
+  function_name = "${var.service_name}-worker"
+  role          = aws_iam_role.worker_lambda_exec.arn
+  package_type  = "Image"
+  image_uri     = "${aws_ecr_repository.app.repository_url}:${var.image_tag}"
+  timeout       = 900
+  memory_size   = 512
+
+  image_config {
+    command = ["src.worker_handler.handler"]
+  }
+
+  environment {
+    variables = {
+      DATABASE_URL_RW    = var.database_url_rw
+      GITHUB_TOKEN       = var.github_token
+      ANTHROPIC_API_KEY  = var.anthropic_api_key
+      OPENAI_API_KEY     = var.openai_api_key
+      EMBEDDING_PROVIDER = var.embedding_provider
+      LLM_MODEL          = var.llm_model
+    }
+  }
+}
+
+resource "aws_lambda_event_source_mapping" "webhook_worker" {
+  event_source_arn = aws_sqs_queue.webhook_events.arn
+  function_name    = aws_lambda_function.worker.arn
+  batch_size       = 1
 }
