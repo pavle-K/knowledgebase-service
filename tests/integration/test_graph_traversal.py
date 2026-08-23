@@ -2,7 +2,7 @@ import uuid
 
 import psycopg
 
-from src.query.graph_traversal import impact_analysis
+from src.query.graph_traversal import impact_analysis, list_dependencies
 
 
 def _make_project(conn: psycopg.Connection, name: str) -> uuid.UUID:
@@ -105,6 +105,36 @@ def test_impact_analysis_flags_undeclared_interface(db_conn: psycopg.Connection)
     result = impact_analysis(db_conn, _name(db_conn, a), "never-declared-endpoint")
     assert result.project_found is True
     assert result.interface_declared is False
+
+
+def test_list_dependencies_returns_direct_edges_only(db_conn: psycopg.Connection) -> None:
+    consumer = _make_project(db_conn, "dep-consumer")
+    provider = _make_project(db_conn, "dep-provider")
+    _depend(db_conn, consumer, provider, "POST /v1/query")
+    db_conn.execute(
+        "insert into dependencies (consumer_project_id, kind, identifier, external_name, source)"
+        " values (%s, 'package', 'httpx', 'httpx', 'manifest')",
+        (consumer,),
+    )
+
+    deps = list_dependencies(db_conn, _name(db_conn, consumer))
+
+    assert deps is not None
+    by_identifier = {d.identifier: d for d in deps}
+    assert by_identifier["POST /v1/query"].provider_name == _name(db_conn, provider)
+    assert by_identifier["httpx"].provider_name is None
+    assert by_identifier["httpx"].external_name == "httpx"
+
+
+def test_list_dependencies_unknown_project_returns_none(db_conn: psycopg.Connection) -> None:
+    assert list_dependencies(db_conn, "does-not-exist") is None
+
+
+def test_list_dependencies_empty_for_project_with_no_dependencies(
+    db_conn: psycopg.Connection,
+) -> None:
+    isolated = _make_project(db_conn, "dep-isolated")
+    assert list_dependencies(db_conn, _name(db_conn, isolated)) == []
 
 
 def _name(conn: psycopg.Connection, project_id: uuid.UUID) -> str:

@@ -1,4 +1,7 @@
-"""Wraps a FastAPI app as an MCP server, exposing only query/impact/healthz as tools.
+"""Wraps a FastAPI app as an MCP server, exposing scoped lookup tools for
+agentic callers to pick directly. /v1/query (NL routing) stays REST-only -
+it's for callers that can't choose a tool themselves; an MCP client already
+can, so routing it through the intent router too would be a redundant hop.
 
 Takes `app` as a parameter instead of importing it from src.main to avoid a
 circular import (src.main mounts the server built here back onto itself).
@@ -16,8 +19,14 @@ from fastmcp.server.providers.openapi import MCPType, RouteMap
 
 _ROUTE_MAPS = [
     RouteMap(methods=["GET"], pattern=r"^/healthz$", mcp_type=MCPType.TOOL),
-    RouteMap(methods=["POST"], pattern=r"^/v1/query$", mcp_type=MCPType.TOOL),
     RouteMap(methods=["POST"], pattern=r"^/v1/impact$", mcp_type=MCPType.TOOL),
+    RouteMap(methods=["POST"], pattern=r"^/v1/dependencies$", mcp_type=MCPType.TOOL),
+    RouteMap(methods=["POST"], pattern=r"^/v1/projects$", mcp_type=MCPType.TOOL),
+    RouteMap(methods=["POST"], pattern=r"^/v1/projects/info$", mcp_type=MCPType.TOOL),
+    RouteMap(methods=["POST"], pattern=r"^/v1/search/docs$", mcp_type=MCPType.TOOL),
+    RouteMap(methods=["POST"], pattern=r"^/v1/search/code$", mcp_type=MCPType.TOOL),
+    RouteMap(methods=["POST"], pattern=r"^/v1/search/commits$", mcp_type=MCPType.TOOL),
+    RouteMap(methods=["POST"], pattern=r"^/v1/commits/recent$", mcp_type=MCPType.TOOL),
     RouteMap(pattern=r".*", mcp_type=MCPType.EXCLUDE),
 ]
 

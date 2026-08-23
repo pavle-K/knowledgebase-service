@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from src.query.query_engine import QueryState
 
 
-def _search_result_to_dict(result: SearchResult) -> dict[str, object]:
+def search_result_to_dict(result: SearchResult) -> dict[str, object]:
     return {
         "project_name": result.project_name,
         "source_path": result.source_path,
@@ -43,8 +43,8 @@ def state_to_data(state: QueryState) -> object:
         sql_result = state["sql_result"]
         return {
             "sql_rows": sql_result.rows if sql_result else None,
-            "vector_results": [_search_result_to_dict(r) for r in state["vector_results"]],
+            "vector_results": [search_result_to_dict(r) for r in state["vector_results"]],
         }
 
     # 'vector' and 'time'
-    return [_search_result_to_dict(r) for r in state["vector_results"]]
+    return [search_result_to_dict(r) for r in state["vector_results"]]

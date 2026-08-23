@@ -86,6 +86,31 @@ def test_search_documents_respects_limit(
     assert len(results) == 2
 
 
+def test_search_documents_filters_by_project(
+    db_conn: psycopg.Connection, migrated_db: MigratedDb
+) -> None:
+    project_a = upsert_project(db_conn, _fake_repo())
+    project_b = upsert_project(db_conn, _fake_repo())
+    embedder = FakeEmbedder()
+
+    _insert_document(db_conn, project_a, "README.md", "shared content about databases", embedder)
+    _insert_document(db_conn, project_b, "README.md", "shared content about databases", embedder)
+    db_conn.commit()
+
+    project_a_name = db_conn.execute(
+        "select name from projects where id = %s", (project_a,)
+    ).fetchone()
+    assert project_a_name is not None
+
+    with psycopg.connect(migrated_db.app_ro_url) as ro_conn:
+        results = search_documents(
+            ro_conn, "shared content about databases", embedder, limit=5, project=project_a_name[0]
+        )
+
+    assert len(results) == 1
+    assert results[0].project_name == project_a_name[0]
+
+
 def test_search_code_chunks_ranks_exact_match_first(
     db_conn: psycopg.Connection, migrated_db: MigratedDb
 ) -> None:
@@ -222,3 +247,34 @@ def test_search_latest_commits_orders_by_date_not_similarity(db_conn: psycopg.Co
 
     shas = [r.source_path for r in results]
     assert shas.index("new222") < shas.index("old111")
+
+
+def test_search_latest_commits_filters_by_project(db_conn: psycopg.Connection) -> None:
+    project_a = upsert_project(db_conn, _fake_repo())
+    project_b = upsert_project(db_conn, _fake_repo())
+    embedder = FakeEmbedder()
+    detail = CommitDetail(
+        files=[
+            CommitFile(filename="src/f.py", additions=1, deletions=0, patch="@@ -1 +1,2 @@\n+x\n")
+        ],
+        additions=1,
+        deletions=0,
+    )
+    info = CommitInfo(
+        sha="onlyb1", message="B change", author="pavle-K", committed_at="2026-01-01T00:00:00Z"
+    )
+    sync_commit(db_conn, project_a, info, detail, embedder, FakeLLMClient())
+    info_b = CommitInfo(
+        sha="onlyb2", message="B2", author="pavle-K", committed_at="2026-01-02T00:00:00Z"
+    )
+    sync_commit(db_conn, project_b, info_b, detail, embedder, FakeLLMClient())
+
+    project_b_name = db_conn.execute(
+        "select name from projects where id = %s", (project_b,)
+    ).fetchone()
+    assert project_b_name is not None
+
+    results = search_latest_commits(db_conn, limit=10, project=project_b_name[0])
+
+    shas = {r.source_path for r in results}
+    assert shas == {"onlyb2"}
