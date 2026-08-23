@@ -1,6 +1,6 @@
 import asyncio
 
-from src.mcp_server import mcp
+from src.main import mcp
 
 
 def test_only_query_impact_healthz_are_exposed_as_tools() -> None:
