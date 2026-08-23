@@ -9,7 +9,7 @@ import re
 
 import psycopg
 
-from src.query.synthesizer import LLMClient
+from src.query.synthesizer import UNTRUSTED_CONTENT_INSTRUCTION, LLMClient, wrap_untrusted
 
 SQL_SYSTEM_PROMPT = (
     "You are a PostgreSQL query generator. Given a database schema and a natural language "
@@ -21,7 +21,8 @@ SQL_SYSTEM_PROMPT = (
     "manifests and may be sparse or empty. The dependencies table (kind='package', "
     "external_name) is populated by static analysis of requirements.txt/pyproject.toml/"
     "package.json and often has real data even when technologies does not - check both, "
-    "e.g. via UNION, when a project.yaml-derived table alone would miss coverage."
+    "e.g. via UNION, when a project.yaml-derived table alone would miss coverage.\n\n"
+    + UNTRUSTED_CONTENT_INSTRUCTION
 )
 
 _CODE_FENCE_RE = re.compile(r"^```(?:sql)?\s*|```\s*$", re.MULTILINE)
@@ -47,7 +48,7 @@ def introspect_schema(conn: psycopg.Connection) -> str:
 def generate_sql(
     query: str, schema_description: str, llm: LLMClient, previous_error: str | None = None
 ) -> str:
-    user_prompt = f"Schema:\n{schema_description}\n\nQuestion: {query}"
+    user_prompt = f"Schema:\n{schema_description}\n\nQuestion:\n{wrap_untrusted(query)}"
     if previous_error:
         user_prompt += (
             f"\n\nThe previous attempt failed with this error - fix it:\n{previous_error}"

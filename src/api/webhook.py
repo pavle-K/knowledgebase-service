@@ -55,6 +55,10 @@ def _handle_push(
     payload: dict[str, Any],
 ) -> dict[str, Any]:
     repo = _repo_from_payload(payload["repository"])
+
+    if payload.get("ref") != f"refs/heads/{repo.default_branch}":
+        return {"status": "ignored", "reason": "not the default branch"}
+
     project_id = upsert_project(conn, repo)
 
     if is_excluded(client, repo.full_name):

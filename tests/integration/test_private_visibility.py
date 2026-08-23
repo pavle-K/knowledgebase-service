@@ -152,7 +152,7 @@ def test_public_role_still_cannot_write(
     migrated_db: MigratedDb, seeded: dict[str, uuid.UUID]
 ) -> None:
     with psycopg.connect(migrated_db.app_ro_public_url) as conn:
-        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        with pytest.raises(psycopg.errors.ReadOnlySqlTransaction):
             conn.execute("update projects set name = 'hijacked' where id = %s", (seeded["public"],))
 
 

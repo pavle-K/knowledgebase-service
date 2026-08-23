@@ -1,3 +1,5 @@
+import pytest
+
 from src.query.graph_traversal import ImpactedProject, ImpactResult
 from src.query.query_synthesis import build_synthesis
 from src.query.sql_exec import SqlResult
@@ -95,7 +97,26 @@ def test_sql_error_is_low_confidence_and_never_fabricates() -> None:
     state = _base_state(intent="sql", sql_result=result)
     summary, confidence, _ = build_synthesis(state, FakeLLMClient())
     assert confidence == "low"
-    assert "column does not exist" in summary
+    assert "3 attempts" in summary
+
+
+def test_sql_error_does_not_leak_raw_driver_error_to_caller(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    result = SqlResult(
+        rows=None,
+        sql="select bad_column",
+        attempts=3,
+        error='column "bad_column" does not exist HINT: Perhaps you meant "good_column".',
+    )
+    state = _base_state(intent="sql", sql_result=result)
+
+    with caplog.at_level("WARNING"):
+        summary, _, _ = build_synthesis(state, FakeLLMClient())
+
+    assert "good_column" not in summary
+    assert "HINT" not in summary
+    assert "good_column" in caplog.text
 
 
 def test_sql_empty_rows_is_high_confidence_no_llm_call() -> None:
