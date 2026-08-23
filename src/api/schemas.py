@@ -48,3 +48,75 @@ class ImpactResponse(BaseModel):
     interface_source: str | None
     provider_manifest_missing: bool
     impacted: list[ImpactedProjectResponse]
+
+
+class SearchRequest(BaseModel):
+    query: str = Field(max_length=MAX_QUERY_LENGTH)
+    project: str | None = None
+    limit: int = 5
+
+
+class CommitSearchRequest(SearchRequest):
+    since: str | None = None  # ISO 8601
+    until: str | None = None  # ISO 8601
+
+
+class RecentCommitsRequest(BaseModel):
+    project: str | None = None
+    limit: int = 5
+
+
+class SearchResultResponse(BaseModel):
+    project_name: str
+    source_path: str
+    content: str
+    distance: float
+    layer: str
+    symbol_name: str | None
+    symbol_type: str | None
+    committed_at: str | None
+
+
+class DependenciesRequest(BaseModel):
+    project: str
+
+
+class DependencyResponse(BaseModel):
+    kind: str
+    identifier: str
+    provider_name: str | None
+    external_name: str | None
+    version_constraint: str | None
+    source: str
+
+
+class DependenciesResponse(BaseModel):
+    project_found: bool
+    dependencies: list[DependencyResponse]
+
+
+class ProjectsRequest(BaseModel):
+    technology: str | None = None
+
+
+class ProjectSummaryResponse(BaseModel):
+    name: str
+    repo_url: str | None
+    description: str | None
+    technologies: list[str]
+    manifest_missing: bool
+
+
+class ProjectInfoRequest(BaseModel):
+    project: str
+
+
+class ProjectInfoResponse(BaseModel):
+    found: bool
+    name: str | None
+    repo_url: str | None
+    description: str | None
+    default_branch: str | None
+    is_private: bool
+    manifest_missing: bool
+    technologies: list[str]

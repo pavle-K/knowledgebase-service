@@ -47,6 +47,49 @@ class ImpactResult:
     impacted: list[ImpactedProject]
 
 
+@dataclass(frozen=True)
+class Dependency:
+    kind: str
+    identifier: str
+    provider_name: str | None  # None for external (non-project) dependencies
+    external_name: str | None
+    version_constraint: str | None
+    source: str  # 'manifest' | 'static_analysis'
+
+
+def list_dependencies(conn: psycopg.Connection, project_name: str) -> list[Dependency] | None:
+    """Forward direction: what a project declares it needs. Non-recursive - direct
+    edges only, same fixed-query discipline as impact_analysis, no transitive walk.
+    """
+    project_row = conn.execute(
+        "select id from projects where name = %s", (project_name,)
+    ).fetchone()
+    if project_row is None:
+        return None
+
+    rows = conn.execute(
+        """
+        select d.kind, d.identifier, p2.name, d.external_name, d.version_constraint, d.source
+        from dependencies d
+        left join projects p2 on p2.id = d.provider_project_id
+        where d.consumer_project_id = %s
+        order by d.kind, d.identifier
+        """,
+        (project_row[0],),
+    ).fetchall()
+    return [
+        Dependency(
+            kind=r[0],
+            identifier=r[1],
+            provider_name=r[2],
+            external_name=r[3],
+            version_constraint=r[4],
+            source=r[5],
+        )
+        for r in rows
+    ]
+
+
 def impact_analysis(
     conn: psycopg.Connection, project_name: str, interface_identifier: str
 ) -> ImpactResult:

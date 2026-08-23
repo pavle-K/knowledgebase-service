@@ -31,7 +31,11 @@ class SearchResult:
 
 
 def search_documents(
-    conn: psycopg.Connection, query: str, embedder: Embedder, limit: int = 5
+    conn: psycopg.Connection,
+    query: str,
+    embedder: Embedder,
+    limit: int = 5,
+    project: str | None = None,
 ) -> list[SearchResult]:
     query_vector = embedder.embed([query])[0]
     rows = conn.execute(
@@ -39,10 +43,11 @@ def search_documents(
         select p.name, d.source_path, d.content, d.embedding <-> %s::vector as distance
         from documents d
         join projects p on p.id = d.project_id
+        where (%s::text is null or p.name = %s)
         order by distance asc
         limit %s
         """,
-        (format_vector(query_vector), limit),
+        (format_vector(query_vector), project, project, limit),
     ).fetchall()
     return [
         SearchResult(project_name=row[0], source_path=row[1], content=row[2], distance=row[3])
@@ -51,7 +56,11 @@ def search_documents(
 
 
 def search_code_chunks(
-    conn: psycopg.Connection, query: str, embedder: Embedder, limit: int = 5
+    conn: psycopg.Connection,
+    query: str,
+    embedder: Embedder,
+    limit: int = 5,
+    project: str | None = None,
 ) -> list[SearchResult]:
     query_vector = embedder.embed([query])[0]
     rows = conn.execute(
@@ -60,10 +69,11 @@ def search_code_chunks(
                c.symbol_name, c.symbol_type
         from code_chunks c
         join projects p on p.id = c.project_id
+        where (%s::text is null or p.name = %s)
         order by distance asc
         limit %s
         """,
-        (format_vector(query_vector), limit),
+        (format_vector(query_vector), project, project, limit),
     ).fetchall()
     return [
         SearchResult(
@@ -86,6 +96,7 @@ def search_commits(
     limit: int = 5,
     since: dt.datetime | None = None,
     until: dt.datetime | None = None,
+    project: str | None = None,
 ) -> list[SearchResult]:
     query_vector = embedder.embed([query])[0]
     rows = conn.execute(
@@ -97,10 +108,11 @@ def search_commits(
         where co.embedding is not null
           and (%s::timestamptz is null or co.committed_at >= %s)
           and (%s::timestamptz is null or co.committed_at <= %s)
+          and (%s::text is null or p.name = %s)
         order by distance asc
         limit %s
         """,
-        (format_vector(query_vector), since, since, until, until, limit),
+        (format_vector(query_vector), since, since, until, until, project, project, limit),
     ).fetchall()
     return [
         SearchResult(
@@ -115,7 +127,9 @@ def search_commits(
     ]
 
 
-def search_latest_commits(conn: psycopg.Connection, limit: int = 5) -> list[SearchResult]:
+def search_latest_commits(
+    conn: psycopg.Connection, limit: int = 5, project: str | None = None
+) -> list[SearchResult]:
     """Most recent commits by date, not similarity - for 'what's the latest/newest'
     questions, where there's no topic to embed and rank against, just a date sort.
     """
@@ -125,10 +139,11 @@ def search_latest_commits(conn: psycopg.Connection, limit: int = 5) -> list[Sear
         from commits co
         join projects p on p.id = co.project_id
         where co.committed_at is not null
+          and (%s::text is null or p.name = %s)
         order by co.committed_at desc
         limit %s
         """,
-        (limit,),
+        (project, project, limit),
     ).fetchall()
     return [
         SearchResult(

@@ -48,8 +48,8 @@ def test_mcp_tool_call_uses_the_actual_callers_own_privilege_tier(
     app.dependency_overrides[get_llm_dep] = lambda: FakeLLMClient(response="ok")
     try:
         with TestClient(app) as client:
-            _call_tool(client, "admin-key", "query", {"query": "x"})
-            _call_tool(client, "public-key", "query", {"query": "x"})
+            _call_tool(client, "admin-key", "search_docs", {"query": "x"})
+            _call_tool(client, "public-key", "search_docs", {"query": "x"})
     finally:
         app.dependency_overrides.clear()
 
