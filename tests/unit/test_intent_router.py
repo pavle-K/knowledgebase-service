@@ -2,8 +2,8 @@ import pytest
 
 from src.query.intent_router import classify_intent
 
-# Highest-value test in the suite (CLAUDE.md section 10): impact-analysis phrasings
-# must route to 'graph', never 'vector'. Not negotiable.
+# Highest-value test in the suite: impact-analysis phrasings must route to
+# 'graph', never 'vector'. Not negotiable.
 CASES = [
     # --- graph: impact/blast-radius phrasings (must never be vector) ---
     ("what breaks if I change the response shape of /users/{id}/flight-history", "graph"),

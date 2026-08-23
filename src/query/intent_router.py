@@ -1,8 +1,8 @@
 """Deterministic intent classification - not LLM-based.
 
 Impact/blast-radius questions MUST route to graph, never vector - this is the
-single most important routing rule in the system (CLAUDE.md, section 7), so it's
-implemented as a hard rule rather than left to a probabilistic classifier.
+single most important routing rule in the system, so it's implemented as a hard
+rule rather than left to a probabilistic classifier.
 """
 
 from __future__ import annotations

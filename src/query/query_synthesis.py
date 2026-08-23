@@ -2,7 +2,7 @@
 
 Graph synthesis is deliberately template-based, not LLM-paraphrased - matches
 /v1/impact's non-LLM, deterministic contract and avoids an LLM softening or
-dropping the confidence caveats CLAUDE.md requires (section 7, point 6).
+dropping the required confidence caveats.
 """
 
 from __future__ import annotations

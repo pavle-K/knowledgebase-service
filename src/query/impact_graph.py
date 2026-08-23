@@ -1,7 +1,7 @@
 """Minimal LangGraph wrapping the deterministic impact-analysis CTE.
 
 No LLM node here - /v1/impact exists so agents get a deterministic answer
-without going through intent classification or synthesis (CLAUDE.md, sections 7-8).
+without going through intent classification or synthesis.
 """
 
 from __future__ import annotations

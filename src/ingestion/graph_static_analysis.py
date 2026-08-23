@@ -1,8 +1,8 @@
 """Modest static analysis for the L3 graph: catches drift, never a substitute for the manifest.
 
-Scope is deliberately narrow per CLAUDE.md section 5: package deps from
-requirements.txt/pyproject.toml/package.json, FastAPI route decorators, and
-hardcoded URLs. No full call-graph analysis.
+Scope is deliberately narrow: package deps from requirements.txt/pyproject.toml/
+package.json, FastAPI route decorators, and hardcoded URLs. No full call-graph
+analysis.
 """
 
 from __future__ import annotations

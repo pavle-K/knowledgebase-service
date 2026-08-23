@@ -1,4 +1,4 @@
-"""GitHub webhook event processing (CLAUDE.md section 9) - push, repository, release.
+"""GitHub webhook event processing - push, repository, release.
 
 Runs off the SQS worker (src/worker_handler.py), not inline in the API request path:
 the API Lambda only validates and enqueues (src/api/webhook.py) since a real push can

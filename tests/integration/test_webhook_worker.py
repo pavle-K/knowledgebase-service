@@ -3,8 +3,8 @@ SQS worker (src/worker_handler.py) uses - src.ingestion.webhook_processor.proces
 
 worker_handler.py itself is thin Lambda glue (SQS record parsing, wiring real
 GitHubClient/DB/embedder/LLM from env vars) and isn't unit-tested here, matching how
-src/lambda_handler.py's Mangum wrapper isn't either - see CLAUDE.md's "don't chase
-coverage on glue code."
+src/lambda_handler.py's Mangum wrapper isn't either - glue code isn't worth chasing
+coverage on.
 """
 
 import base64

@@ -1,8 +1,8 @@
-"""Path-based layer routing for webhook-driven incremental sync (CLAUDE.md section 9).
+"""Path-based layer routing for webhook-driven incremental sync.
 
 A README change touches L1 only; a code file touches L2 + L4; a project.yaml or
 package-manifest change touches L3. Deletions are not handled here - out of
-scope for this stage (see Stage 9 summary).
+scope for now.
 
 L1 scope intentionally matches the seed sync exactly (README.md at root +
 docs/*.md) rather than "any markdown file anywhere" - otherwise webhook-driven

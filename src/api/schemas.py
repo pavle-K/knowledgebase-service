@@ -1,4 +1,4 @@
-"""Request/response models for the REST surface (CLAUDE.md, section 8)."""
+"""Request/response models for the REST surface."""
 
 from __future__ import annotations
 

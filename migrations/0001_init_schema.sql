@@ -122,5 +122,5 @@ create table secret_scan_findings (
 create index on dependencies (provider_project_id, identifier);
 create index on exposed_interfaces (project_id, kind);
 
--- HNSW vector indexes intentionally omitted: not worth it below ~1k rows (see CLAUDE.md, section 5).
+-- HNSW vector indexes intentionally omitted: not worth it below ~1k rows.
 -- Add via a later migration once real row counts justify it.

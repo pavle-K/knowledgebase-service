@@ -1,4 +1,4 @@
-"""POST /webhook/github - HMAC-verified GitHub webhook receiver (CLAUDE.md section 9).
+"""POST /webhook/github - HMAC-verified GitHub webhook receiver.
 
 Only validates and enqueues. The actual ingestion (push/repository/release handling,
 src/ingestion/webhook_processor.py) runs on a separate SQS-triggered Lambda
