@@ -305,6 +305,7 @@ def test_project_yaml_push_syncs_graph_layer(
     unique = uuid.uuid4().hex[:8]
     full_name = f"pavle-K/manifest-repo-{unique}"
     payload = {
+        "ref": "refs/heads/main",
         "repository": {
             "name": f"manifest-repo-{unique}",
             "full_name": full_name,
@@ -353,6 +354,7 @@ def test_push_only_ingests_commits_that_touch_code(
     unique = uuid.uuid4().hex[:8]
     full_name = f"pavle-K/multi-commit-{unique}"
     payload = {
+        "ref": "refs/heads/main",
         "repository": {
             "name": f"multi-commit-{unique}",
             "full_name": full_name,
