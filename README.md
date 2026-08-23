@@ -7,7 +7,7 @@ It answers two different classes of question, backed by two different retrieval 
 - **Descriptive** — "Which of my repos use Postgres?", "Summarize my experience with multi-agent systems." Answered with structured SQL and semantic vector search.
 - **Structural** — "If I change the response shape of `/users/{id}/flight-history`, which repos break?", "What depends on the `documents` table?" Answered with an explicit, statically-derived dependency graph, walked with a deterministic recursive query — never guessed from embedding similarity.
 
-Domain-specific agents live in their own repositories and call this service over HTTP or MCP for the cross-repo context they don't otherwise have.
+Domain-specific agents live in their own repositories and call this service over HTTP or MCP for the cross-repo context they don't otherwise have. Most of that calling happens through nine scoped, deterministic endpoints — search docs/code/commits, list dependencies, look up a project — each a direct SQL or vector call with no routing decision involved. Natural-language `/v1/query` is a separate, REST-only path for callers that hand over raw text with no ability to pick a tool themselves (a badge, an Issue bot); it's one entry point among ten, not the shape of the whole system.
 
 ## Contents
 
@@ -28,30 +28,36 @@ Domain-specific agents live in their own repositories and call this service over
 ## Architecture
 
 ```
-GITHUB (repos, code, commits, READMEs)     /docs (manual: resume, notes, ADRs)
-              |                                       |
-              +-------------------+-------------------+
-                                  v
-                     INGESTION PIPELINE
-    fetch -> secret scan -> route by layer -> chunk -> embed -> upsert
-                                  |
-                                  v
-                   POSTGRESQL + PGVECTOR
-       L1 documents | L2 code chunks | L3 dependency graph | L4 commits
-                                  ^
-                                  | read-only role (app_ro)
-                                  v
-                    LANGGRAPH QUERY ENGINE
-     Router -> [SQL | Vector | Time | Graph] -> Synthesizer
-                                  |
-                                  v
-               FASTAPI + FASTMCP (AWS Lambda + API Gateway)
-                    |                            |
-              REST consumers                MCP clients
-        (other agents, badges, bots)   (Claude Desktop/Code, Cursor)
+GITHUB push --(X-Hub-Signature-256)--> webhook/github --(validate, enqueue only)--> SQS --> WORKER LAMBDA
+                                       (API Lambda, behind          queue        (no API Gateway,
+                                        API Gateway's 30s limit)                  15 min timeout)
+                                                                                        |
+scheduled sync (daily cron) ------------------------------------------------------------+
+                                                                                        |
+GITHUB / /docs (manual: resume, notes, ADRs) -------------------------------------------+
+                                                                                        v
+                                                                    INGESTION PIPELINE (shared)
+                                                          fetch -> secret scan -> route by layer
+                                                                -> chunk -> embed -> upsert
+                                                                                        |
+                                                                                        v
+                                                                     POSTGRESQL + PGVECTOR
+                                                    L1 documents | L2 code chunks | L3 dependency graph | L4 commits
+                                                                                        ^
+                                                                                        | read-only roles (app_ro / app_ro_public)
+                                                                                        v
+                                                                    API LAMBDA: FASTAPI + FASTMCP
+                                              9 scoped tools (direct SQL/vector/graph, no routing) | /v1/query (LangGraph-routed NL)
+                                                                                        |
+                                                                          API Gateway (30s timeout)
+                                                                    |                            |
+                                                              REST consumers                MCP clients
+                                                        (other agents, badges, bots)   (Claude Desktop/Code, Cursor)
 ```
 
-Ingestion writes through a role with write grants (`app_rw`); every query-path read — REST, MCP, and the LangGraph engine — goes through a role with only `SELECT` privileges, enforced at the database level. The natural-language query path never writes, and that boundary is not just an application-level check: the role itself has no write grants, so a sufficiently creative generated query still can't mutate anything.
+Two Lambdas share one container image but run different entry points: the API Lambda (`src.main`, behind API Gateway) serves REST/MCP reads and, for webhooks, only validates the signature and enqueues to SQS; the worker Lambda (`src.worker_handler`, SQS-triggered, no API Gateway) does the actual ingestion, driven off the same shared pipeline as the scheduled sync and the manual `/docs` source. That split exists because a real push can take minutes to fetch files, embed, and summarize diffs — well past API Gateway's 30-second integration timeout, which is what was silently dropping ingested data before the split.
+
+Ingestion writes through a role with write grants (`app_rw`); every query-path read — REST, MCP, and the LangGraph-routed `/v1/query` path — goes through a role with only `SELECT` privileges, enforced at the database level. The natural-language query path never writes, and that boundary is not just an application-level check: the role itself has no write grants, so a sufficiently creative generated query still can't mutate anything.
 
 The same reasoning governs private repositories. Private repos are ingested in full, but reads are split across two roles: `app_ro` sees the whole corpus, while `app_ro_public` is constrained by row-level security to projects with `is_private = false`. Because the SQL node executes LLM-generated statements, a `WHERE` clause in application code would be the wrong place to enforce this — the policy lives on the tables, so it holds regardless of what SQL is generated. See [Access tiers](#access-tiers).
 
@@ -97,7 +103,7 @@ Every piece of content — code, docs, commit diffs — is scanned for secrets b
 
 ## Query engine
 
-Queries run through a small [LangGraph](https://github.com/langchain-ai/langgraph) state machine:
+This section covers `/v1/query` only. The other nine endpoints ([API](#api)) call vector search, graph traversal, or a plain lookup directly — no router, no LLM in the loop, no LangGraph involved. `/v1/query` exists for callers that hand over raw text with no ability to pick a tool themselves, and routes through a small [LangGraph](https://github.com/langchain-ai/langgraph) state machine to figure out which of those same underlying operations to call:
 
 ```
 router --(intent)--> sql | vector | time | graph_traversal
@@ -172,14 +178,37 @@ All endpoints except `/healthz` and `/webhook/github` require a bearer token —
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/v1/query` | `{ "query": str, "layers": [str]? }` → runs the full LangGraph engine. `query` length is capped — see [Cost controls](#cost-controls). Returns `{ summary, intent, data, confidence, coverage_note, execution_time_ms }`. |
+| `POST` | `/v1/query` | `{ "query": str, "layers": [str]? }` → runs the full LangGraph engine. `query` length is capped — see [Cost controls](#cost-controls). Returns `{ summary, intent, data, confidence, coverage_note, execution_time_ms }`. REST-only; excluded from MCP — see [MCP](#mcp). |
 | `POST` | `/v1/impact` | `{ "project": str, "interface": str }` → deterministic graph traversal only, bypassing intent classification. For callers that already know they want an impact answer. |
-| `POST` | `/webhook/github` | GitHub webhook receiver. HMAC-verified via `X-Hub-Signature-256`. Handles `push`, `repository`, `release`, `ping`. |
+| `POST` | `/v1/dependencies` | `{ "project": str }` → what a project declares it depends on (the forward direction of the L3 graph), with each edge's `source` (`manifest` or `static_analysis`). |
+| `POST` | `/v1/projects` | `{ "technology": str? }` → list projects, optionally filtered by declared technology. |
+| `POST` | `/v1/projects/info` | `{ "project": str }` → metadata and tech stack for a single project by name. |
+| `POST` | `/v1/search/docs` | `{ "query": str, "project": str?, "limit": int? }` → vector search over L1 documents. |
+| `POST` | `/v1/search/code` | `{ "query": str, "project": str?, "limit": int? }` → vector search over L2 code chunks. |
+| `POST` | `/v1/search/commits` | `{ "query": str, "project": str?, "since": str?, "until": str?, "limit": int? }` → vector search over L4 commit summaries, optionally time-scoped. |
+| `POST` | `/v1/commits/recent` | `{ "project": str?, "limit": int? }` → most recent commits by date, not relevance. No query text, no embedding call. |
+| `POST` | `/webhook/github` | GitHub webhook receiver. HMAC-verified via `X-Hub-Signature-256`. Validates and enqueues to SQS only — actual ingestion runs on the separate worker Lambda; see [Architecture](#architecture). Handles `push`, `repository`, `release`, `ping`. |
 | `GET` | `/healthz` | Liveness check, unauthenticated. |
+
+Every endpoint except `/v1/query`, `/webhook/github`, and `/healthz` also backs an MCP tool of the same name (`operation_id`) — see [MCP](#mcp).
 
 ## MCP
 
-The same FastAPI app is wrapped as an MCP server (`fastmcp`), exposing exactly three tools — `query`, `impact`, `healthz` — routed through the real HTTP endpoints (and therefore through the same Bearer-token auth as any REST caller). The webhook route is explicitly excluded from tool auto-generation.
+The same FastAPI app is wrapped as an MCP server (`fastmcp`), exposing nine scoped, layer-specific tools — one per deterministic capability, routed through the real HTTP endpoints (and therefore through the same Bearer-token auth as any REST caller, forwarded from the MCP caller's own `Authorization` header rather than a fixed key):
+
+| Tool | Backing endpoint |
+|---|---|
+| `healthz` | `GET /healthz` |
+| `impact` | `POST /v1/impact` |
+| `get_dependencies` | `POST /v1/dependencies` |
+| `list_projects` | `POST /v1/projects` |
+| `get_project_info` | `POST /v1/projects/info` |
+| `search_docs` | `POST /v1/search/docs` |
+| `search_code` | `POST /v1/search/code` |
+| `search_commits` | `POST /v1/search/commits` |
+| `get_recent_commits` | `POST /v1/commits/recent` |
+
+`query` is deliberately **not** exposed as a tool, even though it's REST-accessible. It exists for callers with no ability to choose a tool themselves (a badge, a GitHub Issue bot); an MCP client can already route itself to the right scoped tool directly, so wrapping the LangGraph-routed NL endpoint as a tool would just add a redundant routing hop on top of the one MCP already gives you. The webhook route is explicitly excluded from tool auto-generation as well.
 
 ```
 python -m scripts.run_mcp
@@ -286,7 +315,8 @@ CI (`.github/workflows/test.yml`) runs on every push and PR against a matrix of 
 
 Infrastructure is defined in Terraform (`infra/`) rather than CDK or Pulumi specifically so the `aws` and `github` providers can be applied together in one run — provisioning the Lambda *and* pointing a GitHub webhook at it in a single `terraform apply`.
 
-- `infra/lambda.tf`, `api_gateway.tf` — the FastAPI app, wrapped by [Mangum](https://github.com/jordaneremieff/mangum), deployed as a container-image Lambda behind an HTTP API Gateway
+- `infra/lambda.tf`, `api_gateway.tf` — the FastAPI app, wrapped by [Mangum](https://github.com/jordaneremieff/mangum), deployed as a container-image Lambda behind an HTTP API Gateway; and a second Lambda from the same image (`src.worker_handler.handler`, no API Gateway, 15-minute timeout) that does the actual webhook ingestion — see [Architecture](#architecture)
+- `infra/sqs.tf` — the queue connecting the two: the API Lambda gets `sqs:SendMessage` only, the worker gets `sqs:ReceiveMessage`/`DeleteMessage` only, plus a dead-letter queue after 3 failed receives
 - `infra/github.tf` — the GitHub webhook pointed at the deployed endpoint
 - `infra/bootstrap/` — a small, separately-applied module that provisions the S3 bucket and DynamoDB table used as Terraform's own remote state backend
 - `.github/workflows/deploy.yml` — on a successful `test` run against `main`: builds and pushes the container image to ECR, applies Terraform, and smoke-tests the live `/healthz` endpoint before considering the deploy successful
@@ -298,16 +328,21 @@ Deployment uses OIDC-federated or scoped AWS credentials configured as repositor
 
 ```
 src/
-  api/          FastAPI routes, auth middleware, request/response schemas
+  api/          FastAPI routes (9 scoped endpoints + /v1/query), webhook receiver
+                (validates + enqueues only), auth middleware, request/response schemas
   db/           migration runner
-  ingestion/    GitHub client, chunkers, secret scanner, embedder, graph population
-  query/        LangGraph query engine, SQL generation, vector search, graph traversal
-  main.py       FastAPI app
+  ingestion/    GitHub client, chunkers, secret scanner, embedder, graph population,
+                webhook_processor (actual ingestion, runs on the worker Lambda), queue_client
+  query/        LangGraph engine for /v1/query, plus the direct SQL/vector/graph calls
+                the other 9 endpoints use without going through it
+  main.py       FastAPI app (API Lambda entry point)
+  worker_handler.py  SQS-triggered worker Lambda entry point (no FastAPI/Mangum)
   mcp_server.py MCP tool wrapper
-  lambda_handler.py  Mangum entry point
+  lambda_handler.py  Mangum entry point for the API Lambda
 scripts/        CLI entry points (sync, ask, impact, migrate, resolve-secret, run-mcp)
 migrations/     versioned SQL migrations, applied in order
-infra/          Terraform: Lambda, API Gateway, ECR, GitHub webhook, remote state bootstrap
+infra/          Terraform: Lambda (API + worker), API Gateway, SQS, ECR, GitHub webhook,
+                remote state bootstrap
 tests/
   unit/         no network, no database
   integration/  real Postgres via Docker, mocked external APIs
