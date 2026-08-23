@@ -1,0 +1,89 @@
+name: knowledgebase-service
+description: Personal knowledge API and MCP server over a GitHub account - descriptive
+  search plus an explicit, statically-derived dependency graph for impact analysis.
+technologies:
+  - python
+  - fastapi
+  - postgres
+  - pgvector
+  - langgraph
+  - fastmcp
+  - anthropic
+  - openai
+  - tree-sitter
+  - aws-lambda
+  - aws-sqs
+  - terraform
+
+# What this service offers other repos to call - the graph edge that lets
+# "what breaks if I change X" answer correctly once another repo's own
+# project.yaml declares a `consumes` entry against one of these identifiers.
+# No repo in this account consumes it yet, so `consumes` below is empty -
+# not omitted, since an absent manifest and an empty one mean different
+# things (see manifest_missing).
+exposes:
+  - kind: http_endpoint
+    identifier: "GET /healthz"
+    contract: { returns: "{ status: str }" }
+  - kind: http_endpoint
+    identifier: "POST /v1/query"
+    contract: { returns: "QueryResponse" }
+  - kind: http_endpoint
+    identifier: "POST /v1/impact"
+    contract: { returns: "ImpactResponse" }
+  - kind: http_endpoint
+    identifier: "POST /v1/dependencies"
+    contract: { returns: "DependenciesResponse" }
+  - kind: http_endpoint
+    identifier: "POST /v1/projects"
+    contract: { returns: "list[ProjectSummaryResponse]" }
+  - kind: http_endpoint
+    identifier: "POST /v1/projects/info"
+    contract: { returns: "ProjectInfoResponse" }
+  - kind: http_endpoint
+    identifier: "POST /v1/projects/links"
+    contract: { returns: "list[ProjectLinkResponse]" }
+  - kind: http_endpoint
+    identifier: "POST /v1/search/docs"
+    contract: { returns: "list[SearchResultResponse]" }
+  - kind: http_endpoint
+    identifier: "POST /v1/search/code"
+    contract: { returns: "list[SearchResultResponse]" }
+  - kind: http_endpoint
+    identifier: "POST /v1/search/commits"
+    contract: { returns: "list[SearchResultResponse]" }
+  - kind: http_endpoint
+    identifier: "POST /v1/commits/recent"
+    contract: { returns: "list[SearchResultResponse]" }
+  - kind: mcp_tool
+    identifier: healthz
+    contract: { wraps: "GET /healthz" }
+  - kind: mcp_tool
+    identifier: impact
+    contract: { wraps: "POST /v1/impact" }
+  - kind: mcp_tool
+    identifier: get_dependencies
+    contract: { wraps: "POST /v1/dependencies" }
+  - kind: mcp_tool
+    identifier: list_projects
+    contract: { wraps: "POST /v1/projects" }
+  - kind: mcp_tool
+    identifier: get_project_info
+    contract: { wraps: "POST /v1/projects/info" }
+  - kind: mcp_tool
+    identifier: get_project_links
+    contract: { wraps: "POST /v1/projects/links" }
+  - kind: mcp_tool
+    identifier: search_docs
+    contract: { wraps: "POST /v1/search/docs" }
+  - kind: mcp_tool
+    identifier: search_code
+    contract: { wraps: "POST /v1/search/code" }
+  - kind: mcp_tool
+    identifier: search_commits
+    contract: { wraps: "POST /v1/search/commits" }
+  - kind: mcp_tool
+    identifier: get_recent_commits
+    contract: { wraps: "POST /v1/commits/recent" }
+
+consumes: []
