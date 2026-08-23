@@ -122,3 +122,53 @@ def test_sync_commit_skips_secret_without_calling_llm_or_embedder(
         "select file_path, rule_id from secret_scan_findings where project_id = %s", (project_id,)
     ).fetchone()
     assert finding == ("commit:abc123", "AWS Access Key")
+
+
+def test_sync_commit_excludes_env_file_diff_from_llm_and_embedder(
+    db_conn: psycopg.Connection,
+) -> None:
+    project_id = upsert_project(db_conn, _fake_repo())
+    embedder = FakeEmbedder()
+    llm = FakeLLMClient(response="Adds a logging call.")
+    secret_patch = "@@ -1 +1 @@\n-x = 1\n+INTERNAL_TOKEN=super-secret-value\n"
+    detail = CommitDetail(
+        files=[
+            CommitFile(filename=".env", additions=1, deletions=1, patch=secret_patch),
+            CommitFile(filename="src/f.py", additions=1, deletions=0, patch=REAL_CHANGE_PATCH),
+        ],
+        additions=2,
+        deletions=1,
+    )
+
+    status = sync_commit(db_conn, project_id, _commit_info(), detail, embedder, llm)
+
+    assert status == "ingested"
+    assert "super-secret-value" not in (llm.last_user or "")
+    assert "src/f.py" in (llm.last_user or "")
+
+    row = db_conn.execute(
+        "select files_changed from commits where project_id = %s and sha = 'abc123'",
+        (project_id,),
+    ).fetchone()
+    assert row is not None
+    assert row[0] == [".env", "src/f.py"]
+
+
+def test_sync_commit_skips_when_only_excluded_paths_changed(
+    db_conn: psycopg.Connection,
+) -> None:
+    project_id = upsert_project(db_conn, _fake_repo())
+    embedder = FakeEmbedder()
+    llm = FakeLLMClient()
+    detail = CommitDetail(
+        files=[CommitFile(filename=".env", additions=1, deletions=1, patch="...")],
+        additions=1,
+        deletions=1,
+    )
+
+    status = sync_commit(db_conn, project_id, _commit_info(), detail, embedder, llm)
+
+    assert status == "skipped_noise"
+    assert llm.call_count == 0
+    assert embedder.call_count == 0
+    assert commit_exists(db_conn, project_id, "abc123") is False

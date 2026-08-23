@@ -7,12 +7,15 @@ dropping the confidence caveats CLAUDE.md requires (section 7, point 6).
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from src.query.synthesizer import SYSTEM_PROMPT, LLMClient, format_context, synthesize
 
 if TYPE_CHECKING:
     from src.query.query_engine import QueryState
+
+logger = logging.getLogger(__name__)
 
 SQL_SYNTHESIS_SYSTEM_PROMPT = (
     "You answer questions using only the provided SQL query results. Be concise. "
@@ -57,9 +60,11 @@ def _synthesize_sql(state: QueryState, llm: LLMClient) -> tuple[str, str, str | 
     result = state["sql_result"]
     assert result is not None
     if result.error is not None:
+        logger.warning(
+            "SQL self-heal exhausted after %d attempts: %s", result.attempts, result.error
+        )
         return (
-            f"I couldn't answer that with SQL after {result.attempts} attempts. "
-            f"Last error: {result.error}",
+            f"I couldn't answer that with SQL after {result.attempts} attempts.",
             "low",
             None,
         )

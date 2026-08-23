@@ -8,13 +8,14 @@ from __future__ import annotations
 
 from src.ingestion.chunker_code import LOCKFILE_NAMES
 from src.ingestion.github_client import CommitFile
-from src.query.synthesizer import LLMClient
+from src.query.synthesizer import UNTRUSTED_CONTENT_INSTRUCTION, LLMClient, wrap_untrusted
 
 MAX_DIFF_CHARS = 8000
 
 DIFF_SUMMARY_SYSTEM_PROMPT = (
     "Summarize this git commit in 1-3 sentences: what changed and why it likely matters. "
-    "Be concise and factual, based only on the diff and message provided."
+    "Be concise and factual, based only on the diff and message provided. "
+    + UNTRUSTED_CONTENT_INSTRUCTION
 )
 
 
@@ -48,5 +49,7 @@ def build_diff_text(files: list[CommitFile]) -> str:
 
 
 def summarize_commit(message: str, diff_text: str, llm: LLMClient) -> str:
-    user_prompt = f"Commit message: {message}\n\nDiff:\n{diff_text}"
+    user_prompt = (
+        f"Commit message:\n{wrap_untrusted(message)}\n\nDiff:\n{wrap_untrusted(diff_text)}"
+    )
     return llm.complete(DIFF_SUMMARY_SYSTEM_PROMPT, user_prompt)

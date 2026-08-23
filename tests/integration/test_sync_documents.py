@@ -100,6 +100,28 @@ def test_sync_document_skips_and_records_secret_content(db_conn: psycopg.Connect
     assert "AKIAIOSFODNN7EXAMPLE" not in str(finding_rows)
 
 
+def test_sync_document_skips_excluded_path_entirely(db_conn: psycopg.Connection) -> None:
+    project_id = upsert_project(db_conn, FAKE_REPO)
+    embedder = FakeEmbedder()
+
+    stats = sync_document(db_conn, project_id, "docs", "docs/.env", FAKE_AWS_KEY, embedder)
+
+    assert stats == {"chunks": 0, "embedded": 0, "skipped_unchanged": 0, "skipped_secret": 0}
+    assert embedder.call_count == 0
+
+    doc_rows = db_conn.execute(
+        "select count(*) from documents where project_id = %s", (project_id,)
+    ).fetchone()
+    assert doc_rows is not None
+    assert doc_rows[0] == 0
+
+    finding_rows = db_conn.execute(
+        "select count(*) from secret_scan_findings where project_id = %s", (project_id,)
+    ).fetchone()
+    assert finding_rows is not None
+    assert finding_rows[0] == 0
+
+
 def test_secret_finding_is_not_duplicated_on_rerun(db_conn: psycopg.Connection) -> None:
     project_id = upsert_project(db_conn, FAKE_REPO)
     embedder = FakeEmbedder()

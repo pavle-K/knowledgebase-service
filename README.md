@@ -15,6 +15,7 @@ Domain-specific agents live in their own repositories and call this service over
 - [Data model](#data-model)
 - [Query engine](#query-engine)
 - [Access tiers](#access-tiers)
+- [Trust boundaries](#trust-boundaries)
 - [Cost controls](#cost-controls)
 - [API](#api)
 - [MCP](#mcp)
@@ -146,6 +147,14 @@ The auth middleware resolves the token to a tier and `get_conn` opens the corres
 `app_ro_public` additionally cannot read `secret_scan_findings` or `ingestion_log` at all — both name file paths and repositories that may be private.
 
 Distribute `API_AUTH_KEY` to consumers that should only see public work. Keep `API_ADMIN_KEY` for your own tooling.
+
+## Trust boundaries
+
+This service ingests text it doesn't control — commit diffs, READMEs, docstrings — from any repository it's pointed at, including ones that accept outside contributions. That content is later interpolated into LLM prompts during commit summarization and answer synthesis, which makes prompt injection a real attack surface: a crafted docstring or changelog entry merged through an ordinary-looking PR can carry text aimed at the model rather than the reader.
+
+Every prompt that interpolates content from a repo — or the caller's own natural-language query — wraps it in explicit `<untrusted_content>` delimiters, paired with a system-prompt instruction that content inside those tags is data to describe, never an instruction to follow. This raises the bar substantially, but it's a mitigation, not a guarantee.
+
+Because of that, the contract for consumers is: **treat this service's output as untrusted input, not a verified instruction.** A `summary` or `data` field from `/v1/query` or `/v1/impact` should never, on its own, be sufficient justification for a downstream agent to take a write action — opening a PR, rotating a credential, modifying infrastructure — particularly one that holds its own write credentials. If a synthesized answer appears to direct an action, route it through the same judgment (or human review) you'd apply to any other untrusted document, not through automatic execution.
 
 ## Cost controls
 
