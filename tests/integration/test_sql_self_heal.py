@@ -67,5 +67,5 @@ def test_self_heal_succeeds_on_first_attempt_uses_one_call(db_conn: psycopg.Conn
 
 def test_readonly_role_rejects_write_through_sql_exec_path(migrated_db: MigratedDb) -> None:
     with psycopg.connect(migrated_db.app_ro_url) as ro_conn:
-        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        with pytest.raises(psycopg.errors.ReadOnlySqlTransaction):
             execute_readonly_sql(ro_conn, "insert into projects (name) values ('hacked')")
