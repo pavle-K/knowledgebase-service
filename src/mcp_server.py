@@ -23,6 +23,7 @@ _ROUTE_MAPS = [
     RouteMap(methods=["POST"], pattern=r"^/v1/dependencies$", mcp_type=MCPType.TOOL),
     RouteMap(methods=["POST"], pattern=r"^/v1/projects$", mcp_type=MCPType.TOOL),
     RouteMap(methods=["POST"], pattern=r"^/v1/projects/info$", mcp_type=MCPType.TOOL),
+    RouteMap(methods=["POST"], pattern=r"^/v1/projects/links$", mcp_type=MCPType.TOOL),
     RouteMap(methods=["POST"], pattern=r"^/v1/search/docs$", mcp_type=MCPType.TOOL),
     RouteMap(methods=["POST"], pattern=r"^/v1/search/code$", mcp_type=MCPType.TOOL),
     RouteMap(methods=["POST"], pattern=r"^/v1/search/commits$", mcp_type=MCPType.TOOL),

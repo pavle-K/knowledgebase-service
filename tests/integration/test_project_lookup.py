@@ -5,7 +5,7 @@ import psycopg
 from src.ingestion.documents import upsert_project
 from src.ingestion.github_client import RepoInfo
 from src.ingestion.technologies import sync_technologies
-from src.query.project_lookup import get_project_info, list_projects
+from src.query.project_lookup import get_project_info, get_project_links, list_projects
 
 
 def _fake_repo(name: str) -> RepoInfo:
@@ -62,3 +62,33 @@ def test_get_project_info_returns_metadata_and_tech_stack(db_conn: psycopg.Conne
 def test_get_project_info_unknown_project(db_conn: psycopg.Connection) -> None:
     info = get_project_info(db_conn, "does-not-exist")
     assert info.found is False
+
+
+def test_get_project_links_returns_all_when_unfiltered(db_conn: psycopg.Connection) -> None:
+    repo_a = _fake_repo("link-a")
+    repo_b = _fake_repo("link-b")
+    upsert_project(db_conn, repo_a)
+    upsert_project(db_conn, repo_b)
+
+    links = get_project_links(db_conn)
+
+    by_name = {link.name: link for link in links}
+    assert by_name[repo_a.name].repo_url == repo_a.html_url
+    assert by_name[repo_b.name].repo_url == repo_b.html_url
+
+
+def test_get_project_links_filters_to_named_projects(db_conn: psycopg.Connection) -> None:
+    wanted = _fake_repo("link-wanted")
+    other = _fake_repo("link-other")
+    upsert_project(db_conn, wanted)
+    upsert_project(db_conn, other)
+
+    links = get_project_links(db_conn, projects=[wanted.name])
+
+    names = {link.name for link in links}
+    assert names == {wanted.name}
+
+
+def test_get_project_links_unknown_project_returns_empty(db_conn: psycopg.Connection) -> None:
+    links = get_project_links(db_conn, projects=["does-not-exist"])
+    assert links == []

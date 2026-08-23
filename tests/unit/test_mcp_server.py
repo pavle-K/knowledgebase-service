@@ -8,6 +8,7 @@ def test_expected_scoped_tools_are_exposed() -> None:
     assert sorted(t.name for t in tools) == [
         "get_dependencies",
         "get_project_info",
+        "get_project_links",
         "get_recent_commits",
         "healthz",
         "impact",

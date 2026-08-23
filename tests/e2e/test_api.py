@@ -208,6 +208,7 @@ _SCOPED_ENDPOINTS = [
     ("/v1/dependencies", {"project": "x"}),
     ("/v1/projects", {}),
     ("/v1/projects/info", {"project": "x"}),
+    ("/v1/projects/links", {}),
     ("/v1/search/docs", {"query": "x"}),
     ("/v1/search/code", {"query": "x"}),
     ("/v1/search/commits", {"query": "x"}),
@@ -224,7 +225,7 @@ def test_scoped_endpoint_rejected_without_auth(client: TestClient, path: str, bo
 # MCP tool calls with no arguments arrive as a POST with no body at all (not even
 # `{}`) - distinct from test_list_projects_returns_seeded_project below, which sends
 # an explicit empty JSON object. Both must work.
-@pytest.mark.parametrize("path", ["/v1/projects", "/v1/commits/recent"])
+@pytest.mark.parametrize("path", ["/v1/projects", "/v1/commits/recent", "/v1/projects/links"])
 def test_all_optional_body_endpoint_accepts_a_request_with_no_body(
     client: TestClient, path: str
 ) -> None:
@@ -265,6 +266,40 @@ def test_get_project_info_unknown_project(client: TestClient) -> None:
     )
     assert response.status_code == 200
     assert response.json()["found"] is False
+
+
+def test_get_project_links_returns_name_and_repo_url(
+    client: TestClient,
+    db_conn: psycopg.Connection,  # noqa: F811
+) -> None:
+    repo = _fake_repo()
+    upsert_project(db_conn, repo)
+
+    response = client.post(
+        "/v1/projects/links", json={}, headers={"Authorization": f"Bearer {API_AUTH_KEY}"}
+    )
+    assert response.status_code == 200
+    match = next(p for p in response.json() if p["name"] == repo.name)
+    assert match["repo_url"] == repo.html_url
+
+
+def test_get_project_links_filters_to_requested_projects(
+    client: TestClient,
+    db_conn: psycopg.Connection,  # noqa: F811
+) -> None:
+    wanted = _fake_repo()
+    other = _fake_repo()
+    upsert_project(db_conn, wanted)
+    upsert_project(db_conn, other)
+
+    response = client.post(
+        "/v1/projects/links",
+        json={"projects": [wanted.name]},
+        headers={"Authorization": f"Bearer {API_AUTH_KEY}"},
+    )
+    assert response.status_code == 200
+    names = {p["name"] for p in response.json()}
+    assert names == {wanted.name}
 
 
 def test_search_docs_succeeds(client: TestClient) -> None:

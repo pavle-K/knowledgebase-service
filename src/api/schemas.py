@@ -120,3 +120,13 @@ class ProjectInfoResponse(BaseModel):
     is_private: bool
     manifest_missing: bool
     technologies: list[str]
+
+
+class ProjectLinksRequest(BaseModel):
+    projects: list[str] | None = None
+
+
+class ProjectLinkResponse(BaseModel):
+    name: str
+    repo_url: str | None
+    description: str | None

@@ -23,6 +23,8 @@ from src.api.schemas import (
     ImpactResponse,
     ProjectInfoRequest,
     ProjectInfoResponse,
+    ProjectLinkResponse,
+    ProjectLinksRequest,
     ProjectsRequest,
     ProjectSummaryResponse,
     QueryRequest,
@@ -35,7 +37,7 @@ from src.api.serialization import search_result_to_dict, state_to_data
 from src.ingestion.embedder import Embedder
 from src.query.graph_traversal import list_dependencies
 from src.query.impact_graph import run_impact_query
-from src.query.project_lookup import get_project_info, list_projects
+from src.query.project_lookup import get_project_info, get_project_links, list_projects
 from src.query.query_engine import run_query_engine
 from src.query.synthesizer import LLMClient
 from src.query.vector_search import (
@@ -56,6 +58,7 @@ LLMDep = Annotated[LLMClient, Depends(get_llm_dep)]
 # singletons (not a call in the signature) since both are read-only.
 _EMPTY_PROJECTS_REQUEST = ProjectsRequest()
 _EMPTY_RECENT_COMMITS_REQUEST = RecentCommitsRequest()
+_EMPTY_PROJECT_LINKS_REQUEST = ProjectLinksRequest()
 
 
 @router.post("/v1/query", response_model=QueryResponse, operation_id="query")
@@ -151,6 +154,21 @@ def get_project_info_endpoint(body: ProjectInfoRequest, conn: ConnDep) -> Projec
         manifest_missing=info.manifest_missing,
         technologies=info.technologies,
     )
+
+
+@router.post(
+    "/v1/projects/links", response_model=list[ProjectLinkResponse], operation_id="get_project_links"
+)
+def get_project_links_endpoint(
+    conn: ConnDep, body: ProjectLinksRequest = _EMPTY_PROJECT_LINKS_REQUEST
+) -> list[ProjectLinkResponse]:
+    """Canonical name + repo link per project - for citing an exact source, not
+    recalling one from prose. `projects` narrows to those names; omitted, returns all."""
+    links = get_project_links(conn, projects=body.projects)
+    return [
+        ProjectLinkResponse(name=link.name, repo_url=link.repo_url, description=link.description)
+        for link in links
+    ]
 
 
 @router.post(

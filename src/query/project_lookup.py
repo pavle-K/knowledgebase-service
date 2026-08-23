@@ -89,3 +89,28 @@ def get_project_info(conn: psycopg.Connection, project_name: str) -> ProjectInfo
         manifest_missing=row[5],
         technologies=sorted(row[6]),
     )
+
+
+@dataclass(frozen=True)
+class ProjectLink:
+    name: str
+    repo_url: str | None
+    description: str | None
+
+
+def get_project_links(
+    conn: psycopg.Connection, projects: list[str] | None = None
+) -> list[ProjectLink]:
+    """Canonical name + repo link per project, for citing exact sources rather than
+    prose recalling them. `projects` narrows to those names (e.g. resolving links for
+    projects a prior search/impact call already surfaced); omitted, returns all."""
+    rows = conn.execute(
+        """
+        select name, repo_url, description
+        from projects
+        where %s::text[] is null or name = any(%s)
+        order by name
+        """,
+        (projects, projects),
+    ).fetchall()
+    return [ProjectLink(name=r[0], repo_url=r[1], description=r[2]) for r in rows]

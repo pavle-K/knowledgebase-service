@@ -183,6 +183,7 @@ All endpoints except `/healthz` and `/webhook/github` require a bearer token —
 | `POST` | `/v1/dependencies` | `{ "project": str }` → what a project declares it depends on (the forward direction of the L3 graph), with each edge's `source` (`manifest` or `static_analysis`). |
 | `POST` | `/v1/projects` | `{ "technology": str? }` → list projects, optionally filtered by declared technology. |
 | `POST` | `/v1/projects/info` | `{ "project": str }` → metadata and tech stack for a single project by name. |
+| `POST` | `/v1/projects/links` | `{ "projects": [str]? }` → canonical `{ name, repo_url, description }` per project. Omit `projects` for all of them, or pass names (e.g. ones a prior search/impact call surfaced) to resolve just those to their exact links — for citing a source, not recalling one from prose. |
 | `POST` | `/v1/search/docs` | `{ "query": str, "project": str?, "limit": int? }` → vector search over L1 documents. |
 | `POST` | `/v1/search/code` | `{ "query": str, "project": str?, "limit": int? }` → vector search over L2 code chunks. |
 | `POST` | `/v1/search/commits` | `{ "query": str, "project": str?, "since": str?, "until": str?, "limit": int? }` → vector search over L4 commit summaries, optionally time-scoped. |
@@ -194,7 +195,7 @@ Every endpoint except `/v1/query`, `/webhook/github`, and `/healthz` also backs 
 
 ## MCP
 
-The same FastAPI app is wrapped as an MCP server (`fastmcp`), exposing nine scoped, layer-specific tools — one per deterministic capability, routed through the real HTTP endpoints (and therefore through the same Bearer-token auth as any REST caller, forwarded from the MCP caller's own `Authorization` header rather than a fixed key):
+The same FastAPI app is wrapped as an MCP server (`fastmcp`), exposing ten scoped, layer-specific tools — one per deterministic capability, routed through the real HTTP endpoints (and therefore through the same Bearer-token auth as any REST caller, forwarded from the MCP caller's own `Authorization` header rather than a fixed key):
 
 | Tool | Backing endpoint |
 |---|---|
@@ -203,10 +204,13 @@ The same FastAPI app is wrapped as an MCP server (`fastmcp`), exposing nine scop
 | `get_dependencies` | `POST /v1/dependencies` |
 | `list_projects` | `POST /v1/projects` |
 | `get_project_info` | `POST /v1/projects/info` |
+| `get_project_links` | `POST /v1/projects/links` |
 | `search_docs` | `POST /v1/search/docs` |
 | `search_code` | `POST /v1/search/code` |
 | `search_commits` | `POST /v1/search/commits` |
 | `get_recent_commits` | `POST /v1/commits/recent` |
+
+`get_project_links` exists because the other tools return a project's *name* (`project_name` in search results, `name` in impact/dependency results) but not its repo URL, and an LLM-synthesized answer on the `/v1/query` path tends to drop the exact link even when it's in scope. Calling `get_project_links` — optionally scoped to the names another call just surfaced — resolves them to a canonical `{ name, repo_url, description }` deterministically, rather than trusting a model to remember or reconstruct one.
 
 `query` is deliberately **not** exposed as a tool, even though it's REST-accessible. It exists for callers with no ability to choose a tool themselves (a badge, a GitHub Issue bot); an MCP client can already route itself to the right scoped tool directly, so wrapping the LangGraph-routed NL endpoint as a tool would just add a redundant routing hop on top of the one MCP already gives you. The webhook route is explicitly excluded from tool auto-generation as well.
 
