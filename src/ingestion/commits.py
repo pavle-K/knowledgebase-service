@@ -15,7 +15,7 @@ from src.ingestion.commit_summarizer import build_diff_text, is_noise_commit, su
 from src.ingestion.documents import record_secret_finding
 from src.ingestion.embedder import Embedder, format_vector
 from src.ingestion.github_client import CommitDetail, CommitInfo
-from src.ingestion.secrets import scan_for_secrets
+from src.ingestion.secrets import is_excluded_path, scan_for_secrets
 from src.query.synthesizer import LLMClient
 
 
@@ -37,10 +37,13 @@ def sync_commit(
     """Returns one of: 'ingested', 'skipped_noise', 'skipped_existing', 'skipped_secret'."""
     if commit_exists(conn, project_id, info.sha):
         return "skipped_existing"
-    if is_noise_commit(detail.files):
+
+    # excluded paths never reach the scanner or the LLM, regardless of what they contain
+    scannable_files = [f for f in detail.files if not is_excluded_path(f.filename)]
+    if is_noise_commit(scannable_files):
         return "skipped_noise"
 
-    diff_text = build_diff_text(detail.files)
+    diff_text = build_diff_text(scannable_files)
     findings = scan_for_secrets(f"{info.message}\n\n{diff_text}")
 
     diff_summary: str | None = None

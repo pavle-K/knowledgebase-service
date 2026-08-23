@@ -13,7 +13,7 @@ from psycopg.types.json import Json
 from src.ingestion.chunker_markdown import chunk_markdown
 from src.ingestion.embedder import Embedder, format_vector
 from src.ingestion.github_client import RepoInfo
-from src.ingestion.secrets import scan_for_secrets
+from src.ingestion.secrets import is_excluded_path, scan_for_secrets
 
 
 def content_hash(content: str) -> str:
@@ -73,6 +73,9 @@ def sync_document(
     embedder: Embedder,
 ) -> dict[str, int]:
     stats = {"chunks": 0, "embedded": 0, "skipped_unchanged": 0, "skipped_secret": 0}
+
+    if is_excluded_path(source_path):
+        return stats
 
     for index, chunk_content in enumerate(chunk_markdown(content)):
         stats["chunks"] += 1
