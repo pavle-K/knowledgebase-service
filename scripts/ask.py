@@ -9,7 +9,7 @@ import psycopg
 
 from src.ingestion.embedder import get_embedder
 from src.query.query_engine import run_query_engine
-from src.query.synthesizer import get_llm_client
+from src.query.synthesizer import get_langfuse_client, get_llm_client
 
 
 def main() -> int:
@@ -33,6 +33,10 @@ def main() -> int:
     if state["coverage_note"]:
         print(f"Coverage note: {state['coverage_note']}")
     print(state["summary"])
+
+    langfuse = get_langfuse_client()
+    if langfuse is not None:
+        langfuse.flush()
     return 0
 
 

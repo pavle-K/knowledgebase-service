@@ -17,6 +17,7 @@ Domain-specific agents live in their own repositories and call this service over
 - [Access tiers](#access-tiers)
 - [Trust boundaries](#trust-boundaries)
 - [Cost controls](#cost-controls)
+- [Observability](#observability)
 - [API](#api)
 - [MCP](#mcp)
 - [Setup](#setup)
@@ -172,6 +173,14 @@ Because of that, the contract for consumers is: **treat this service's output as
 
 Neither of the first two distinguishes `API_AUTH_KEY` from `API_ADMIN_KEY`, or one consumer from another — that requires per-key quotas and revocation, which this project doesn't yet have.
 
+## Observability
+
+Every LLM call — SQL generation, SQL-result synthesis, hybrid synthesis, vector synthesis, impact-parameter extraction, and commit-diff summarization — funnels through the single `AnthropicLLMClient.complete()` implementation in `src/query/synthesizer.py`, so that's the one place tracing is wired in. Each call is labeled with a `name` (e.g. `sql-generation`, `commit-diff-summary`) so usage and cost are broken down by call type in the [Langfuse](https://langfuse.com) UI, not lumped into one undifferentiated stream.
+
+Set `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` to enable it; leave either unset and tracing no-ops entirely — `get_langfuse_client()` returns `None` and every call site treats that as "disabled," never as an error. Nothing about running this service depends on Langfuse being configured, reachable, or even installed correctly at runtime.
+
+**Lambda-specific detail:** Langfuse batches traces in a background thread by default, which assumes a long-running process. On Lambda the execution environment can freeze the instant a handler returns — before that background thread has flushed — silently dropping traces. Both Lambdas explicitly call `langfuse.flush()` at their one exit point (`src/api/auth.py`'s middleware, after every request; `src/worker_handler.py`, after every SQS record) rather than relying on the default background flush. The CLI scripts (`scripts/ask.py`, `scripts/sync_github.py`) flush at the end of `main()` for the same reason, even though a normal process exit is less likely to lose the tail end of a batch.
+
 ## API
 
 All endpoints except `/healthz` and `/webhook/github` require a bearer token — see [Access tiers](#access-tiers).
@@ -260,6 +269,7 @@ Fill in `.env`:
 | `API_AUTH_KEY` | Bearer token for public-tier access |
 | `API_ADMIN_KEY` | Bearer token for privileged access to private projects |
 | `GITHUB_WEBHOOK_SECRET` | Shared secret for verifying webhook signatures |
+| `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` | Optional: LLM usage/cost/tracing. Leave both unset to disable — observability is strictly additive, never a hard requirement to run this service. See [Observability](#observability). |
 
 The passwords embedded in `DATABASE_URL_RW`, `DATABASE_URL_RO`, and `DATABASE_URL_RO_PUBLIC` are what the migrations set on those roles — change the URL and re-run `make migrate` to rotate.
 

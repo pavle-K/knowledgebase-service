@@ -68,6 +68,28 @@ variable "api_admin_key" {
   sensitive = true
 }
 
+# Optional: LLM usage/cost/tracing. src.query.synthesizer.get_langfuse_client()
+# treats an empty value as "not configured" and no-ops - observability must
+# never become a hard requirement to run this service.
+variable "langfuse_public_key" {
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
+variable "langfuse_secret_key" {
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
+# Defaults to the EU Langfuse Cloud region when empty - only needed if the
+# Langfuse project the keys above belong to is on the US region or self-hosted.
+variable "langfuse_base_url" {
+  type    = string
+  default = ""
+}
+
 variable "embedding_provider" {
   type    = string
   default = "openai"

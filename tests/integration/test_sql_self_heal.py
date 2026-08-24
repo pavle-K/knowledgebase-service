@@ -12,7 +12,7 @@ class _SequencedLLMClient:
         self._responses = responses
         self.call_count = 0
 
-    def complete(self, system: str, user: str) -> str:
+    def complete(self, system: str, user: str, *, name: str = "llm-complete") -> str:
         response = self._responses[min(self.call_count, len(self._responses) - 1)]
         self.call_count += 1
         return response
@@ -23,7 +23,7 @@ class _AlwaysBadLLMClient:
         self._bad_sql = bad_sql
         self.call_count = 0
 
-    def complete(self, system: str, user: str) -> str:
+    def complete(self, system: str, user: str, *, name: str = "llm-complete") -> str:
         self.call_count += 1
         return self._bad_sql
 

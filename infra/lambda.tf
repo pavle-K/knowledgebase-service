@@ -54,6 +54,9 @@ resource "aws_lambda_function" "app" {
       LLM_MODEL              = var.llm_model
       MAX_QUERY_LENGTH       = var.max_query_length
       WEBHOOK_QUEUE_URL      = aws_sqs_queue.webhook_events.url
+      LANGFUSE_PUBLIC_KEY    = var.langfuse_public_key
+      LANGFUSE_SECRET_KEY    = var.langfuse_secret_key
+      LANGFUSE_BASE_URL      = var.langfuse_base_url
     }
   }
 }
@@ -75,12 +78,15 @@ resource "aws_lambda_function" "worker" {
 
   environment {
     variables = {
-      DATABASE_URL_RW    = var.database_url_rw
-      GITHUB_TOKEN       = var.github_token
-      ANTHROPIC_API_KEY  = var.anthropic_api_key
-      OPENAI_API_KEY     = var.openai_api_key
-      EMBEDDING_PROVIDER = var.embedding_provider
-      LLM_MODEL          = var.llm_model
+      DATABASE_URL_RW     = var.database_url_rw
+      GITHUB_TOKEN        = var.github_token
+      ANTHROPIC_API_KEY   = var.anthropic_api_key
+      OPENAI_API_KEY      = var.openai_api_key
+      EMBEDDING_PROVIDER  = var.embedding_provider
+      LLM_MODEL           = var.llm_model
+      LANGFUSE_PUBLIC_KEY = var.langfuse_public_key
+      LANGFUSE_SECRET_KEY = var.langfuse_secret_key
+      LANGFUSE_BASE_URL   = var.langfuse_base_url
     }
   }
 }

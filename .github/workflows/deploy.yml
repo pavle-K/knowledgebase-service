@@ -19,6 +19,9 @@ env:
   TF_VAR_openai_api_key: ${{ secrets.OPENAI_API_KEY }}
   TF_VAR_api_auth_key: ${{ secrets.API_AUTH_KEY }}
   TF_VAR_api_admin_key: ${{ secrets.API_ADMIN_KEY }}
+  TF_VAR_langfuse_public_key: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+  TF_VAR_langfuse_secret_key: ${{ secrets.LANGFUSE_SECRET_KEY }}
+  TF_VAR_langfuse_base_url: ${{ vars.LANGFUSE_BASE_URL }}
   TF_VAR_embedding_provider: ${{ vars.EMBEDDING_PROVIDER }}
   TF_VAR_llm_model: ${{ vars.LLM_MODEL }}
   TF_VAR_max_query_length: ${{ vars.MAX_QUERY_LENGTH }}

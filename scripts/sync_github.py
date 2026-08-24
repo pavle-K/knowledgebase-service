@@ -24,7 +24,7 @@ from src.ingestion.repo_sync import (
     sync_manifest_for_repo,
     sync_static_analysis_for_file,
 )
-from src.query.synthesizer import get_llm_client
+from src.query.synthesizer import get_langfuse_client, get_llm_client
 
 STAT_KEYS = ("chunks", "embedded", "skipped_unchanged", "skipped_secret")
 
@@ -124,6 +124,9 @@ def main() -> int:
             )
 
     client.close()
+    langfuse = get_langfuse_client()
+    if langfuse is not None:
+        langfuse.flush()
     return 0
 
 
