@@ -18,7 +18,7 @@ import psycopg
 from src.ingestion.embedder import get_embedder
 from src.ingestion.github_client import GitHubClient
 from src.ingestion.webhook_processor import process_event
-from src.query.synthesizer import get_llm_client
+from src.query.synthesizer import get_langfuse_client, get_llm_client
 
 
 def handler(event: dict[str, Any], context: Any) -> None:
@@ -37,3 +37,8 @@ def _process_record(record: dict[str, Any]) -> None:
     finally:
         client.close()
         conn.close()
+        # Same reasoning as src/api/auth.py: this Lambda can freeze right after
+        # returning, before Langfuse's background batch thread flushes on its own.
+        langfuse = get_langfuse_client()
+        if langfuse is not None:
+            langfuse.flush()

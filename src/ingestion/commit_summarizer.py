@@ -52,4 +52,4 @@ def summarize_commit(message: str, diff_text: str, llm: LLMClient) -> str:
     user_prompt = (
         f"Commit message:\n{wrap_untrusted(message)}\n\nDiff:\n{wrap_untrusted(diff_text)}"
     )
-    return llm.complete(DIFF_SUMMARY_SYSTEM_PROMPT, user_prompt)
+    return llm.complete(DIFF_SUMMARY_SYSTEM_PROMPT, user_prompt, name="commit-diff-summary")
