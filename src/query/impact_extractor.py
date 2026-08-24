@@ -20,7 +20,7 @@ EXTRACT_SYSTEM_PROMPT = (
 
 
 def extract_impact_params(query: str, llm: LLMClient) -> tuple[str, str] | None:
-    raw = llm.complete(EXTRACT_SYSTEM_PROMPT, query)
+    raw = llm.complete(EXTRACT_SYSTEM_PROMPT, query, name="impact-param-extraction")
     if raw.strip() == "UNKNOWN":
         return None
 

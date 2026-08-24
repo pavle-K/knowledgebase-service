@@ -19,6 +19,8 @@ from collections.abc import Awaitable, Callable
 from fastapi import Request, Response
 from starlette.responses import JSONResponse
 
+from src.query.synthesizer import get_langfuse_client
+
 EXEMPT_PATHS = {"/healthz", "/webhook/github"}
 
 
@@ -40,4 +42,13 @@ async def auth_middleware(
     else:
         return JSONResponse({"detail": "Unauthorized"}, status_code=401)
 
-    return await call_next(request)
+    try:
+        return await call_next(request)
+    finally:
+        # Langfuse batches traces in a background thread; Lambda can freeze the
+        # execution environment the instant this handler returns, silently
+        # dropping anything still queued. Flush before that happens. A no-op
+        # when Langfuse isn't configured (get_langfuse_client() returns None).
+        langfuse = get_langfuse_client()
+        if langfuse is not None:
+            langfuse.flush()

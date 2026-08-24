@@ -73,7 +73,7 @@ def _synthesize_sql(state: QueryState, llm: LLMClient) -> tuple[str, str, str | 
 
     context = "\n".join(str(row) for row in result.rows[:20])
     user_prompt = f"Question: {state['query']}\n\nSQL query results:\n{context}"
-    summary = llm.complete(SQL_SYNTHESIS_SYSTEM_PROMPT, user_prompt)
+    summary = llm.complete(SQL_SYNTHESIS_SYSTEM_PROMPT, user_prompt, name="sql-result-synthesis")
     return summary, "high", None
 
 
@@ -105,7 +105,7 @@ def _synthesize_hybrid(state: QueryState, llm: LLMClient) -> tuple[str, str, str
         f"Structured data:\n{sql_context}\n\n"
         f"Documents/code:\n{vector_context}"
     )
-    summary = llm.complete(SYSTEM_PROMPT, user_prompt)
+    summary = llm.complete(SYSTEM_PROMPT, user_prompt, name="hybrid-synthesis")
     confidence = "high" if result and not result.error else "medium"
     return summary, confidence, None
 

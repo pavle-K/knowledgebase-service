@@ -53,5 +53,5 @@ def generate_sql(
         user_prompt += (
             f"\n\nThe previous attempt failed with this error - fix it:\n{previous_error}"
         )
-    raw = llm.complete(SQL_SYSTEM_PROMPT, user_prompt)
+    raw = llm.complete(SQL_SYSTEM_PROMPT, user_prompt, name="sql-generation")
     return _CODE_FENCE_RE.sub("", raw).strip()
