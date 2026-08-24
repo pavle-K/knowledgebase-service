@@ -55,6 +55,9 @@ exposes:
   - kind: http_endpoint
     identifier: "POST /v1/commits/recent"
     contract: { returns: "list[SearchResultResponse]" }
+  - kind: http_endpoint
+    identifier: "GET /v1/account"
+    contract: { returns: "AccountMetadataResponse" }
   - kind: mcp_tool
     identifier: healthz
     contract: { wraps: "GET /healthz" }
@@ -85,5 +88,8 @@ exposes:
   - kind: mcp_tool
     identifier: get_recent_commits
     contract: { wraps: "POST /v1/commits/recent" }
+  - kind: mcp_tool
+    identifier: get_account_info
+    contract: { wraps: "GET /v1/account" }
 
 consumes: []

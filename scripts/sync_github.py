@@ -9,7 +9,12 @@ import psycopg
 
 from src.ingestion.chunker_code import is_candidate_code_file
 from src.ingestion.code import sync_code_file
-from src.ingestion.documents import record_ingestion_log, sync_document, upsert_project
+from src.ingestion.documents import (
+    record_ingestion_log,
+    sync_document,
+    upsert_account_info,
+    upsert_project,
+)
 from src.ingestion.embedder import get_embedder
 from src.ingestion.exclusion import EXCLUDE_MARKER_PATH, is_excluded, purge_project_data
 from src.ingestion.github_client import GitHubClient
@@ -41,6 +46,12 @@ def main() -> int:
     client = GitHubClient(token=github_token)
 
     with psycopg.connect(database_url) as conn:
+        account = client.get_account_info()
+        upsert_account_info(conn, account)
+        record_ingestion_log(conn, "manual", None, "account", "success", {"login": account.login})
+        conn.commit()
+        print(f"Account: {account.login} (public_repos={account.public_repos})")
+
         repos = [r for r in client.list_repos() if not r.fork]
         print(f"Found {len(repos)} repos (forks excluded)")
 

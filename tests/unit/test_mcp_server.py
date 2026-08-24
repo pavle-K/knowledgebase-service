@@ -6,6 +6,7 @@ from src.main import mcp
 def test_expected_scoped_tools_are_exposed() -> None:
     tools = asyncio.run(mcp.list_tools())
     assert sorted(t.name for t in tools) == [
+        "get_account_info",
         "get_dependencies",
         "get_project_info",
         "get_project_links",

@@ -19,6 +19,27 @@ class RepoInfo:
     default_branch: str
     is_private: bool
     fork: bool
+    created_at: str | None = None  # ISO 8601, as returned by GitHub
+    pushed_at: str | None = None
+    stargazers_count: int | None = None
+    language: str | None = None
+    forks_count: int | None = None
+    open_issues_count: int | None = None
+
+
+@dataclass(frozen=True)
+class AccountInfo:
+    login: str
+    name: str | None
+    bio: str | None
+    company: str | None
+    blog: str | None
+    location: str | None
+    created_at: str  # ISO 8601, as returned by GitHub
+    public_repos: int
+    private_repos: int | None  # only present when authenticated as the account itself
+    followers: int
+    following: int
 
 
 @dataclass(frozen=True)
@@ -81,6 +102,12 @@ class GitHubClient:
                     default_branch=item["default_branch"],
                     is_private=item["private"],
                     fork=item["fork"],
+                    created_at=item["created_at"],
+                    pushed_at=item.get("pushed_at"),
+                    stargazers_count=item["stargazers_count"],
+                    language=item.get("language"),
+                    forks_count=item["forks_count"],
+                    open_issues_count=item["open_issues_count"],
                 )
                 for item in batch
             )
@@ -88,6 +115,26 @@ class GitHubClient:
                 break  # short page: no more repos to fetch, save a request
             page += 1
         return repos
+
+    def get_account_info(self) -> AccountInfo:
+        """GET /user - the account that owns GITHUB_TOKEN. total_private_repos is only
+        present for the authenticated account, not the public /users/{username} view."""
+        response = self._client.get("/user")
+        response.raise_for_status()
+        data = response.json()
+        return AccountInfo(
+            login=data["login"],
+            name=data.get("name"),
+            bio=data.get("bio"),
+            company=data.get("company"),
+            blog=data.get("blog") or None,
+            location=data.get("location"),
+            created_at=data["created_at"],
+            public_repos=data["public_repos"],
+            private_repos=data.get("total_private_repos"),
+            followers=data["followers"],
+            following=data["following"],
+        )
 
     def get_readme(self, full_name: str) -> str | None:
         response = self._client.get(f"/repos/{full_name}/readme")
