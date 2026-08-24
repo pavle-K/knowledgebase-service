@@ -29,6 +29,25 @@ def test_list_repos_excludes_nothing_itself_and_paginates_to_empty() -> None:
     assert repos[0].full_name == "pavle-K/knowledgebase-service"
     assert repos[0].fork is False
     assert repos[1].fork is True
+    assert repos[0].created_at == "2026-01-01T00:00:00Z"
+    assert repos[0].stargazers_count == 3
+    assert repos[0].language == "Python"
+
+
+@respx.mock
+def test_get_account_info_parses_authenticated_user() -> None:
+    respx.get(f"{GITHUB_API_BASE}/user").mock(
+        return_value=httpx.Response(200, json=_load("user.json"))
+    )
+
+    client = GitHubClient(token="fake-token")
+    account = client.get_account_info()
+
+    assert account.login == "pavle-K"
+    assert account.created_at == "2015-03-01T00:00:00Z"
+    assert account.public_repos == 12
+    assert account.private_repos == 4
+    assert account.followers == 7
 
 
 @respx.mock

@@ -35,6 +35,12 @@ def _repo_from_payload(repo_payload: dict[str, Any]) -> RepoInfo:
         # private rather than silently exposing it to the public-tier role.
         is_private=repo_payload.get("private", True),
         fork=repo_payload.get("fork", False),
+        created_at=repo_payload.get("created_at"),
+        pushed_at=repo_payload.get("pushed_at"),
+        stargazers_count=repo_payload.get("stargazers_count"),
+        language=repo_payload.get("language"),
+        forks_count=repo_payload.get("forks_count"),
+        open_issues_count=repo_payload.get("open_issues_count"),
     )
 
 

@@ -130,3 +130,28 @@ class ProjectLinkResponse(BaseModel):
     name: str
     repo_url: str | None
     description: str | None
+    is_private: bool
+    repo_created_at: str | None
+    repo_age_days: int | None
+    repo_pushed_at: str | None
+    stargazers_count: int | None
+    language: str | None
+    forks_count: int | None
+    open_issues_count: int | None
+
+
+class AccountMetadataResponse(BaseModel):
+    found: bool
+    login: str | None
+    name: str | None
+    bio: str | None
+    company: str | None
+    blog: str | None
+    location: str | None
+    account_created_at: str | None
+    account_age_days: int | None
+    public_repos: int | None
+    private_repos: int | None
+    followers: int | None
+    following: int | None
+    synced_at: str | None

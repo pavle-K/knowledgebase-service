@@ -19,6 +19,7 @@ from fastmcp.server.providers.openapi import MCPType, RouteMap
 
 _ROUTE_MAPS = [
     RouteMap(methods=["GET"], pattern=r"^/healthz$", mcp_type=MCPType.TOOL),
+    RouteMap(methods=["GET"], pattern=r"^/v1/account$", mcp_type=MCPType.TOOL),
     RouteMap(methods=["POST"], pattern=r"^/v1/impact$", mcp_type=MCPType.TOOL),
     RouteMap(methods=["POST"], pattern=r"^/v1/dependencies$", mcp_type=MCPType.TOOL),
     RouteMap(methods=["POST"], pattern=r"^/v1/projects$", mcp_type=MCPType.TOOL),

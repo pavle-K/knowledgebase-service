@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends
 
 from src.api.dependencies import get_conn, get_embedder_dep, get_llm_dep
 from src.api.schemas import (
+    AccountMetadataResponse,
     CommitSearchRequest,
     DependenciesRequest,
     DependenciesResponse,
@@ -37,7 +38,12 @@ from src.api.serialization import search_result_to_dict, state_to_data
 from src.ingestion.embedder import Embedder
 from src.query.graph_traversal import list_dependencies
 from src.query.impact_graph import run_impact_query
-from src.query.project_lookup import get_project_info, get_project_links, list_projects
+from src.query.project_lookup import (
+    get_account_metadata,
+    get_project_info,
+    get_project_links,
+    list_projects,
+)
 from src.query.query_engine import run_query_engine
 from src.query.synthesizer import LLMClient
 from src.query.vector_search import (
@@ -59,6 +65,10 @@ LLMDep = Annotated[LLMClient, Depends(get_llm_dep)]
 _EMPTY_PROJECTS_REQUEST = ProjectsRequest()
 _EMPTY_RECENT_COMMITS_REQUEST = RecentCommitsRequest()
 _EMPTY_PROJECT_LINKS_REQUEST = ProjectLinksRequest()
+
+
+def _iso(value: dt.datetime | None) -> str | None:
+    return value.isoformat() if value is not None else None
 
 
 @router.post("/v1/query", response_model=QueryResponse, operation_id="query")
@@ -162,13 +172,49 @@ def get_project_info_endpoint(body: ProjectInfoRequest, conn: ConnDep) -> Projec
 def get_project_links_endpoint(
     conn: ConnDep, body: ProjectLinksRequest = _EMPTY_PROJECT_LINKS_REQUEST
 ) -> list[ProjectLinkResponse]:
-    """Canonical name + repo link per project - for citing an exact source, not
-    recalling one from prose. `projects` narrows to those names; omitted, returns all."""
+    """Canonical name, repo link, and generic per-repo stats (age, stars, language,
+    activity) - for citing an exact source and its basic facts, not recalling them
+    from prose. `projects` narrows to those names; omitted, returns all."""
     links = get_project_links(conn, projects=body.projects)
     return [
-        ProjectLinkResponse(name=link.name, repo_url=link.repo_url, description=link.description)
+        ProjectLinkResponse(
+            name=link.name,
+            repo_url=link.repo_url,
+            description=link.description,
+            is_private=link.is_private,
+            repo_created_at=_iso(link.repo_created_at),
+            repo_age_days=link.repo_age_days,
+            repo_pushed_at=_iso(link.repo_pushed_at),
+            stargazers_count=link.stargazers_count,
+            language=link.language,
+            forks_count=link.forks_count,
+            open_issues_count=link.open_issues_count,
+        )
         for link in links
     ]
+
+
+@router.get("/v1/account", response_model=AccountMetadataResponse, operation_id="get_account_info")
+def get_account_info_endpoint(conn: ConnDep) -> AccountMetadataResponse:
+    """Account-level facts: age, bio, and public/private repo and follower counts.
+    `found=False` means no sync has populated it yet, not that the account is empty."""
+    info = get_account_metadata(conn)
+    return AccountMetadataResponse(
+        found=info.found,
+        login=info.login,
+        name=info.name,
+        bio=info.bio,
+        company=info.company,
+        blog=info.blog,
+        location=info.location,
+        account_created_at=_iso(info.account_created_at),
+        account_age_days=info.account_age_days,
+        public_repos=info.public_repos,
+        private_repos=info.private_repos,
+        followers=info.followers,
+        following=info.following,
+        synced_at=_iso(info.synced_at),
+    )
 
 
 @router.post(

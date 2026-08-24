@@ -6,9 +6,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.api.dependencies import get_conn, get_embedder_dep, get_llm_dep
-from src.ingestion.documents import upsert_project
+from src.ingestion.documents import upsert_account_info, upsert_project
 from src.ingestion.embedder import FakeEmbedder
-from src.ingestion.github_client import RepoInfo
+from src.ingestion.github_client import AccountInfo, RepoInfo
 from src.main import app
 from src.query.synthesizer import FakeLLMClient
 from tests.integration.conftest import MigratedDb, db_conn, migrated_db  # noqa: F401
@@ -45,6 +45,12 @@ def _fake_repo() -> RepoInfo:
         default_branch="main",
         is_private=False,
         fork=False,
+        created_at="2020-01-01T00:00:00Z",
+        pushed_at="2026-01-15T10:00:00Z",
+        stargazers_count=5,
+        language="Python",
+        forks_count=1,
+        open_issues_count=2,
     )
 
 
@@ -69,6 +75,48 @@ def test_query_rejected_with_wrong_token(client: TestClient) -> None:
 def test_impact_rejected_without_auth(client: TestClient) -> None:
     response = client.post("/v1/impact", json={"project": "x", "interface": "y"})
     assert response.status_code == 401
+
+
+def test_account_rejected_without_auth(client: TestClient) -> None:
+    response = client.get("/v1/account")
+    assert response.status_code == 401
+
+
+def test_get_account_info_not_found_before_any_sync(client: TestClient) -> None:
+    response = client.get("/v1/account", headers={"Authorization": f"Bearer {API_AUTH_KEY}"})
+    assert response.status_code == 200
+    assert response.json()["found"] is False
+
+
+def test_get_account_info_returns_synced_account(
+    client: TestClient,
+    db_conn: psycopg.Connection,  # noqa: F811
+) -> None:
+    upsert_account_info(
+        db_conn,
+        AccountInfo(
+            login="pavle-K",
+            name="Pavle",
+            bio="Building things.",
+            company=None,
+            blog="https://meetpavle.duckdns.org/",
+            location=None,
+            created_at="2015-03-01T00:00:00Z",
+            public_repos=12,
+            private_repos=4,
+            followers=7,
+            following=3,
+        ),
+    )
+
+    response = client.get("/v1/account", headers={"Authorization": f"Bearer {API_AUTH_KEY}"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["found"] is True
+    assert body["login"] == "pavle-K"
+    assert body["public_repos"] == 12
+    assert body["private_repos"] == 4
+    assert body["account_age_days"] > 365
 
 
 def test_query_succeeds_and_matches_documented_schema(client: TestClient) -> None:
@@ -281,6 +329,9 @@ def test_get_project_links_returns_name_and_repo_url(
     assert response.status_code == 200
     match = next(p for p in response.json() if p["name"] == repo.name)
     assert match["repo_url"] == repo.html_url
+    assert match["stargazers_count"] == 5
+    assert match["language"] == "Python"
+    assert match["repo_age_days"] > 365
 
 
 def test_get_project_links_filters_to_requested_projects(

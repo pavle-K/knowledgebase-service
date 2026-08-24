@@ -12,7 +12,7 @@ from psycopg.types.json import Json
 
 from src.ingestion.chunker_markdown import chunk_markdown
 from src.ingestion.embedder import Embedder, format_vector
-from src.ingestion.github_client import RepoInfo
+from src.ingestion.github_client import AccountInfo, RepoInfo
 from src.ingestion.secrets import is_excluded_path, scan_for_secrets
 
 
@@ -23,20 +23,77 @@ def content_hash(content: str) -> str:
 def upsert_project(conn: psycopg.Connection, repo: RepoInfo) -> uuid.UUID:
     row = conn.execute(
         """
-        insert into projects (name, repo_url, description, source, default_branch, is_private)
-        values (%s, %s, %s, 'github', %s, %s)
+        insert into projects
+            (name, repo_url, description, source, default_branch, is_private,
+             repo_created_at, repo_pushed_at, stargazers_count, language,
+             forks_count, open_issues_count)
+        values (%s, %s, %s, 'github', %s, %s, %s, %s, %s, %s, %s, %s)
         on conflict (repo_url) do update set
             name = excluded.name,
             description = excluded.description,
             default_branch = excluded.default_branch,
             is_private = excluded.is_private,
+            repo_created_at = excluded.repo_created_at,
+            repo_pushed_at = excluded.repo_pushed_at,
+            stargazers_count = excluded.stargazers_count,
+            language = excluded.language,
+            forks_count = excluded.forks_count,
+            open_issues_count = excluded.open_issues_count,
             updated_at = now()
         returning id
         """,
-        (repo.name, repo.html_url, repo.description, repo.default_branch, repo.is_private),
+        (
+            repo.name,
+            repo.html_url,
+            repo.description,
+            repo.default_branch,
+            repo.is_private,
+            repo.created_at,
+            repo.pushed_at,
+            repo.stargazers_count,
+            repo.language,
+            repo.forks_count,
+            repo.open_issues_count,
+        ),
     ).fetchone()
     assert row is not None
     return cast(uuid.UUID, row[0])
+
+
+def upsert_account_info(conn: psycopg.Connection, account: AccountInfo) -> None:
+    conn.execute(
+        """
+        insert into github_account
+            (login, name, bio, company, blog, location, account_created_at,
+             public_repos, private_repos, followers, following, synced_at)
+        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
+        on conflict (login) do update set
+            name = excluded.name,
+            bio = excluded.bio,
+            company = excluded.company,
+            blog = excluded.blog,
+            location = excluded.location,
+            account_created_at = excluded.account_created_at,
+            public_repos = excluded.public_repos,
+            private_repos = excluded.private_repos,
+            followers = excluded.followers,
+            following = excluded.following,
+            synced_at = now()
+        """,
+        (
+            account.login,
+            account.name,
+            account.bio,
+            account.company,
+            account.blog,
+            account.location,
+            account.created_at,
+            account.public_repos,
+            account.private_repos,
+            account.followers,
+            account.following,
+        ),
+    )
 
 
 def record_secret_finding(
